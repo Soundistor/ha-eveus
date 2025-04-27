@@ -1,2 +1,3 @@
-# ha-eveus
-Custom HACS integration for Eveus
+# Eveus for Home Assistant
+
+## Installation
