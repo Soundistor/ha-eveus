@@ -1,0 +1,11 @@
+{
+  "codeowners": ["Soundistor"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/Soundistor/ha-eveus",
+  "domain": "eveus",
+  "iot_class": "local_polling",
+  "name": "Eveus",
+  "requirements": [],
+  "version": "0.0.1"
+}
