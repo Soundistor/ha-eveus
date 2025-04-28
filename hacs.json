@@ -1,4 +1,6 @@
 {
-  "name": "Eveus",
-  "render_readme": true
+  "name": "Eveus EVSE Integration",
+  "content_in_root": false,
+  "domains": ["eveus"],
+  "country": "any"
 }
