@@ -1,6 +1,8 @@
 {
   "name": "Eveus EVSE Integration",
-  "content_in_root": false,
-  "domains": ["eveus"],
+  "filename": "eveus_charger.zip",
+  "homeassistant": "2023.11.0",
+  "render_readme": true,
+  "domains": ["sensor", "binary_sensor", "switch", "number", "select"],
   "country": "any"
 }

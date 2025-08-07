@@ -1,0 +1,31 @@
+set_current:
+  description: "Установить ток зарядки"
+  fields:
+    entity_id:
+      description: "Entity ID of the charger (any entity of this integration)."
+      example: "number.my_ev_charger_192_168_31_101_current_set"
+    current:
+      description: "Значение тока в амперах"
+      example: 16
+      required: true
+      selector:
+        number:
+          min: 7
+          max: 32
+          step: 1
+
+set_ai_mode:
+  description: "Установить режим адаптивного питания"
+  fields:
+    entity_id:
+      description: "Entity ID of the charger."
+    mode:
+      description: "Режим: Off, Voltage, Tesla (auto), Power"
+      required: true
+      selector:
+        select:
+          options:
+            - Off
+            - Voltage
+            - Tesla (auto)
+            - Power
