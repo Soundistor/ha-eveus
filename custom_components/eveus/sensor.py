@@ -1,93 +1,73 @@
-from homeassistant.components.sensor import (
-    SensorEntity,
-    SensorDeviceClass,
-    SensorStateClass,
-)
-from homeassistant.const import (
-    UnitOfElectricCurrent,
-    UnitOfEnergy,
-    UnitOfPower,
-    UnitOfTemperature,
-    UnitOfTime,
-    UnitOfVoltage,
-    PERCENTAGE,
-)
-from .const import (
-    DOMAIN,
-    STATE_MAPPING,
-    SUBSTATE_ERROR_MAPPING,
-    SUBSTATE_NORMAL_MAPPING,
-    AI_STATUS_MAPPING,
-    # Все остальные атрибуты...
-)
+"""Сенсоры с атрибутами зарядки."""
+from __future__ import annotations
+
+from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from .const import DOMAIN
+
+# Список датчиков, которые мы хотим показывать в UI.
+# По‑молчанию выводим «state» как основной атрибут, остальные – как атрибуты.
+SENSOR_DESCRIPTIONS = [
+    SensorEntityDescription(key="state", name="State", icon="mdi:power"),
+    SensorEntityDescription(key="currentSet", name="Set current", native_unit_of_measurement="A", device_class="current"),
+    SensorEntityDescription(key="voltMeas1", name="Voltage", native_unit_of_measurement="V", device_class="voltage"),
+    SensorEntityDescription(key="curMeas1", name="Current", native_unit_of_measurement="A", device_class="current"),
+    SensorEntityDescription(key="powerMeas", name="Power", native_unit_of_measurement="kW", device_class="power"),
+    SensorEntityDescription(key="temperature1", name="Temperature", native_unit_of_measurement="°C", device_class="temperature"),
+    SensorEntityDescription(key="sessionEnergy", name="Session energy", native_unit_of_measurement="kWh", device_class="energy"),
+    SensorEntityDescription(key="sessionTime", name="Session time", native_unit_of_measurement="s", device_class="duration"),
+    SensorEntityDescription(key="totalEnergy", name="Total energy", native_unit_of_measurement="kWh", device_class="energy"),
+    # Добавляйте любые другие атрибуты из `json_attributes`, которые вам нужны в UI
+]
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up all Eveus sensors."""
-    sensors = [
-        EveusSensor(entry, "evse_enabled", "EVSE Enabled", None, None),
-        EveusSensor(entry, "state", "State", None, None),
-        EveusSensor(entry, "substate", "Substate", None, None),
-        EveusSensor(entry, "current_set", "Current Set", UnitOfElectricCurrent.AMPERE, SensorDeviceClass.CURRENT),
-        EveusSensor(entry, "volt_meas1", "Voltage L1", UnitOfVoltage.VOLT, SensorDeviceClass.VOLTAGE),
-        EveusSensor(entry, "cur_meas1", "Current L1", UnitOfElectricCurrent.AMPERE, SensorDeviceClass.CURRENT),
-        EveusSensor(entry, "power_meas", "Power", UnitOfPower.KILO_WATT, SensorDeviceClass.POWER),
-        EveusSensor(entry, "temperature1", "Box Temperature", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE),
-        EveusSensor(entry, "temperature2", "Plug Temperature", UnitOfTemperature.CELSIUS, SensorDeviceClass.TEMPERATURE),
-        EveusSensor(entry, "ground", "Ground", None, None),
-        EveusSensor(entry, "ground_ctrl", "Ground Control", None, None),
-        EveusSensor(entry, "ai_voltage", "Adaptive Voltage", UnitOfVoltage.VOLT, SensorDeviceClass.VOLTAGE),
-        EveusSensor(entry, "session_time", "Session Duration (sec)", UnitOfTime.SECONDS, SensorDeviceClass.DURATION),
-        EveusSensor(entry, "session_time_formatted", "Session Duration", None, None),
-        EveusSensor(entry, "session_energy", "Session Energy", UnitOfEnergy.KILO_WATT_HOUR, SensorDeviceClass.ENERGY),
-        EveusSensor(entry, "total_energy", "Total Energy", UnitOfEnergy.KILO_WATT_HOUR, SensorDeviceClass.ENERGY),
-        EveusSensor(entry, "ai_status", "Adaptive Mode", None, None),
-        EveusSensor(entry, "system_time", "System Time", None, None),
-        # Добавьте остальные сенсоры по аналогии...
-    ]
-    async_add_entities(sensors, True)
+    """Настраиваем сенсоры."""
+    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    charger = hass.data[DOMAIN][entry.entry_id]["charger"]
 
-class EveusSensor(SensorEntity):
-    """Representation of a Eveus sensor."""
+    entities = []
+    for description in SENSOR_DESCRIPTIONS:
+        # Если у конкретной модели нет такого атрибута – не создаём.
+        if description.key not in charger.capabilities:
+            continue
+        entities.append(
+            ChargerSensor(coordinator, charger, description)
+        )
+    async_add_entities(entities, True)
 
-    def __init__(self, entry, sensor_type, name, unit, device_class):
-        """Initialize the sensor."""
-        self._entry = entry
-        self._sensor_type = sensor_type
-        self._attr_name = f"{entry.data['name']} {name}"
-        self._attr_unique_id = f"{entry.entry_id}_{sensor_type}"
-        self._attr_native_unit_of_measurement = unit
-        self._attr_device_class = device_class
-        self._attr_state_class = SensorStateClass.MEASUREMENT if unit else None
 
-    async def async_update(self):
-        """Fetch new state data for the sensor."""
-        data = await self._fetch_data()  # Этот метод нужно реализовать в __init__.py
-        if not data:
-            return
+class ChargerSensor(CoordinatorEntity, SensorEntity):
+    """Один сенсор, данные берутся из `coordinator.data`."""
 
-        if self._sensor_type == "evse_enabled":
-            self._attr_native_value = "Yes" if data.get(ATTR_EVSE_ENABLED) == 1 else "No"
-        
-        elif self._sensor_type == "state":
-            state_num = data.get(ATTR_STATE)
-            self._attr_native_value = STATE_MAPPING.get(state_num, "Unknown")
-        
-        elif self._sensor_type == "substate":
-            state_num = data.get(ATTR_STATE)
-            substate_num = data.get(ATTR_SUB_STATE)
-            if state_num == 7:  # Error state
-                self._attr_native_value = SUBSTATE_ERROR_MAPPING.get(substate_num, "Unknown")
-            else:
-                self._attr_native_value = SUBSTATE_NORMAL_MAPPING.get(substate_num, "Unknown")
-        
-        elif self._sensor_type == "current_set":
-            self._attr_native_value = data.get(ATTR_CURRENT_SET)
-        
-        elif self._sensor_type == "session_time_formatted":
-            seconds = data.get(ATTR_SESSION_TIME)
-            if seconds is not None:
-                hours, remainder = divmod(seconds, 3600)
-                minutes, seconds = divmod(remainder, 60)
-                self._attr_native_value = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
-        
-        # Добавьте обработку остальных сенсоров по аналогии...
+    def __init__(self, coordinator, charger, description: SensorEntityDescription):
+        super().__init__(coordinator)
+        self._charger = charger
+        self.entity_description = description
+        self._attr_unique_id = f"{charger.ip}-{description.key}"
+        self._attr_name = f"{description.name} ({charger.ip})"
+
+    @property
+    def native_value(self):
+        """Текущее значение."""
+        return self.coordinator.data.get(self.entity_description.key)
+
+    @property
+    def extra_state_attributes(self):
+        """Выдаём всё, что пришло в статус, кроме «основного» значения."""
+        # Атрибуты, которые пользователь возможно не захочет видеть в списке сенсоров,
+        # но они полезны в атрибутах.
+        return {
+            k: v
+            for k, v in self.coordinator.data.items()
+            if k != self.entity_description.key
+        }
+
+    @property
+    def device_info(self):
+        """Привязываем все сущности к одному устройству."""
+        return {
+            "identifiers": {(DOMAIN, self._charger.ip)},
+            "name": f"EV charger {self._charger.ip}",
+            "manufacturer": "YourManufacturer",
+            "model": self._charger.__class__.__name__,
+        }
