@@ -2,18 +2,25 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add EV charger",
+        "title": "Add Eveus Charger",
         "data": {
           "ip_address": "IP address",
-          "model": "Model",
-          "username": "Username (optional)",
-          "password": "Password (optional)",
-          "device_prefix": "Device prefix (e.g. gbt_eveus)"
+          "model": "API version",
+          "username": "Username",
+          "password": "Password",
+          "device_prefix": "Device prefix"
+        },
+        "data_description": {
+          "ip_address": "Local IP address of the charger on your network.",
+          "model": "v1 — older firmware (41 fields, integer values). v2 — newer firmware (97 fields, includes sub-state, IEM energy meters, Wi-Fi signal).",
+          "username": "Leave empty if the charger has no authentication configured.",
+          "password": "Leave empty if the charger has no authentication configured.",
+          "device_prefix": "Prefix for all entity IDs. For example, prefix 'eveus_home' produces sensor.eveus_home_state, sensor.eveus_home_currentset, etc. Leave empty to use the entry ID."
         }
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to the charger"
+      "cannot_connect": "Cannot connect to the charger. Check the IP address and that the charger is reachable."
     }
   },
   "options": {
@@ -22,6 +29,9 @@
         "title": "Options",
         "data": {
           "update_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "update_interval": "How often to poll the charger for new data. Range: 5–300 seconds."
         }
       }
     }
