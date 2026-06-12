@@ -1,12 +1,11 @@
 {
-  "codeowners": ["Soundistor"],
+  "codeowners": ["@Soundistor"],
   "config_flow": true,
-  "dependencies": [],
   "documentation": "https://github.com/Soundistor/ha-eveus",
   "domain": "eveus",
+  "homeassistant": "2024.1.0",
+  "integration_type": "device",
   "iot_class": "local_polling",
   "name": "Eveus Charger",
-  "requirements": ["aiohttp==3.9.*", "async-timeout==4.*"],
-  "version": "0.1.0",
-  "integration_type": "device"
+  "version": "0.1.0"
 }

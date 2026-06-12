@@ -1,73 +1,110 @@
-"""Сенсоры с атрибутами зарядки."""
+"""Сенсоры зарядки."""
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import EntityCategory
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
 from .const import DOMAIN
 
-# Список датчиков, которые мы хотим показывать в UI.
-# По‑молчанию выводим «state» как основной атрибут, остальные – как атрибуты.
-SENSOR_DESCRIPTIONS = [
-    SensorEntityDescription(key="state", name="State", icon="mdi:power"),
-    SensorEntityDescription(key="currentSet", name="Set current", native_unit_of_measurement="A", device_class="current"),
-    SensorEntityDescription(key="voltMeas1", name="Voltage", native_unit_of_measurement="V", device_class="voltage"),
-    SensorEntityDescription(key="curMeas1", name="Current", native_unit_of_measurement="A", device_class="current"),
-    SensorEntityDescription(key="powerMeas", name="Power", native_unit_of_measurement="kW", device_class="power"),
-    SensorEntityDescription(key="temperature1", name="Temperature", native_unit_of_measurement="°C", device_class="temperature"),
-    SensorEntityDescription(key="sessionEnergy", name="Session energy", native_unit_of_measurement="kWh", device_class="energy"),
-    SensorEntityDescription(key="sessionTime", name="Session time", native_unit_of_measurement="s", device_class="duration"),
-    SensorEntityDescription(key="totalEnergy", name="Total energy", native_unit_of_measurement="kWh", device_class="energy"),
-    # Добавляйте любые другие атрибуты из `json_attributes`, которые вам нужны в UI
+# name = lowercase key — определяет entity_id как {platform}.{prefix}_{name}
+SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
+    SensorEntityDescription(key="state",         name="state",         icon="mdi:power"),
+    SensorEntityDescription(key="currentSet",    name="currentset",    native_unit_of_measurement="A",   device_class=SensorDeviceClass.CURRENT),
+    SensorEntityDescription(key="curDesign",     name="curdesign",     native_unit_of_measurement="A",   device_class=SensorDeviceClass.CURRENT),
+    SensorEntityDescription(key="voltMeas1",     name="voltmeas1",     native_unit_of_measurement="V",   device_class=SensorDeviceClass.VOLTAGE),
+    SensorEntityDescription(key="curMeas1",      name="curmeas1",      native_unit_of_measurement="A",   device_class=SensorDeviceClass.CURRENT),
+    SensorEntityDescription(key="powerMeas",     name="powermeas",     native_unit_of_measurement="W",   device_class=SensorDeviceClass.POWER),
+    SensorEntityDescription(key="temperature1",  name="temperature1",  native_unit_of_measurement="°C",  device_class=SensorDeviceClass.TEMPERATURE),
+    SensorEntityDescription(key="temperature2",  name="temperature2",  native_unit_of_measurement="°C",  device_class=SensorDeviceClass.TEMPERATURE),
+    SensorEntityDescription(key="aiStatus",      name="aistatus",      icon="mdi:brain"),
+    SensorEntityDescription(key="aiVoltage",     name="aivoltage",     native_unit_of_measurement="V",   device_class=SensorDeviceClass.VOLTAGE),
+    SensorEntityDescription(key="sessionTime",   name="sessiontime",   native_unit_of_measurement="s",   device_class=SensorDeviceClass.DURATION),
+    SensorEntityDescription(key="sessionEnergy", name="sessionenergy", native_unit_of_measurement="kWh", device_class=SensorDeviceClass.ENERGY),
+    SensorEntityDescription(
+        key="totalEnergy", name="totalenergy",
+        native_unit_of_measurement="kWh",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    SensorEntityDescription(key="systemTime",    name="systemtime",    icon="mdi:clock"),
+    SensorEntityDescription(
+        key="leakValue", name="leakvalue",
+        native_unit_of_measurement="mA",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(key="newsessiontime", name="newsessiontime", icon="mdi:battery-clock-outline"),
+    SensorEntityDescription(key="subState",      name="substate",      icon="mdi:information"),
+    SensorEntityDescription(
+        key="vBat", name="vbat",
+        native_unit_of_measurement="V",
+        device_class=SensorDeviceClass.VOLTAGE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="RSSI", name="rssi",
+        native_unit_of_measurement="dBm",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="IEM1", name="iem1",
+        native_unit_of_measurement="kWh",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    SensorEntityDescription(
+        key="IEM2", name="iem2",
+        native_unit_of_measurement="kWh",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
 ]
 
+
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Настраиваем сенсоры."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    charger = hass.data[DOMAIN][entry.entry_id]["charger"]
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = data["coordinator"]
+    charger = data["charger"]
+    prefix = data.get("prefix", "")
 
     entities = []
     for description in SENSOR_DESCRIPTIONS:
-        # Если у конкретной модели нет такого атрибута – не создаём.
         if description.key not in charger.capabilities:
             continue
-        entities.append(
-            ChargerSensor(coordinator, charger, description)
-        )
+        entities.append(ChargerSensor(coordinator, charger, description, prefix, entry.entry_id))
     async_add_entities(entities, True)
 
 
 class ChargerSensor(CoordinatorEntity, SensorEntity):
-    """Один сенсор, данные берутся из `coordinator.data`."""
 
-    def __init__(self, coordinator, charger, description: SensorEntityDescription):
+    def __init__(self, coordinator, charger, description: SensorEntityDescription,
+                 prefix: str, entry_id: str):
         super().__init__(coordinator)
         self._charger = charger
+        self._entry_id = entry_id
         self.entity_description = description
-        self._attr_unique_id = f"{charger.ip}-{description.key}"
-        self._attr_name = f"{description.name} ({charger.ip})"
+        uid = f"{prefix}_{description.name}" if prefix else f"{entry_id}_{description.name}"
+        self._attr_unique_id = uid
+        self._attr_name = f"{prefix} {description.name}" if prefix else description.name
 
     @property
     def native_value(self):
-        """Текущее значение."""
         return self.coordinator.data.get(self.entity_description.key)
 
     @property
-    def extra_state_attributes(self):
-        """Выдаём всё, что пришло в статус, кроме «основного» значения."""
-        # Атрибуты, которые пользователь возможно не захочет видеть в списке сенсоров,
-        # но они полезны в атрибутах.
-        return {
-            k: v
-            for k, v in self.coordinator.data.items()
-            if k != self.entity_description.key
-        }
-
-    @property
-    def device_info(self):
-        """Привязываем все сущности к одному устройству."""
-        return {
-            "identifiers": {(DOMAIN, self._charger.ip)},
-            "name": f"EV charger {self._charger.ip}",
-            "manufacturer": "YourManufacturer",
-            "model": self._charger.__class__.__name__,
-        }
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._charger.ip)},
+            name=f"Eveus {self._charger.ip}",
+            manufacturer="Eveus",
+            model=self._charger.model_name,
+            sw_version=self.coordinator.data.get("verFWMain") if self.coordinator.data else None,
+            configuration_url=f"http://{self._charger.ip}",
+        )

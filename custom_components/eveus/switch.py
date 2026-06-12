@@ -1,35 +1,34 @@
-"""Переключатель включения/выключения зарядки."""
-
+"""Switch – включение/выключение зарядки."""
 from __future__ import annotations
+
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
 from .const import DOMAIN
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    charger = hass.data[DOMAIN][entry.entry_id]["charger"]
 
-    # Все модели умеют включать/выключать в нашем API
-    async_add_entities([ChargerSwitch(coordinator, charger)], True)
+async def async_setup_entry(hass, entry, async_add_entities):
+    data = hass.data[DOMAIN][entry.entry_id]
+    prefix = data.get("prefix", "")
+    async_add_entities([ChargerSwitch(data["coordinator"], data["charger"], prefix, entry.entry_id)], True)
 
 
 class ChargerSwitch(CoordinatorEntity, SwitchEntity):
-    def __init__(self, coordinator, charger):
+
+    def __init__(self, coordinator, charger, prefix: str, entry_id: str):
         super().__init__(coordinator)
         self._charger = charger
-        self._attr_name = f"Charging ({charger.ip})"
-        self._attr_unique_id = f"{charger.ip}-charging"
+        uid = f"{prefix}_charging" if prefix else f"{entry_id}_charging"
+        self._attr_unique_id = uid
+        self._attr_name = f"{prefix} charging" if prefix else "charging"
 
     @property
     def is_on(self) -> bool:
-        """Включён ли заряд? Мы смотрим поле `evseEnabled`."""
-        # v1/ v2 используют одно поле `evseEnabled`: 0 – включено, 1 – выключено
         enabled = self.coordinator.data.get("evseEnabled")
         if enabled is None:
             return False
-        # Если v1: 0 – работает → True, 1 – остановлен → False
-        # Если v2: 0 – старт → True, 1 – стоп → False
-        return enabled == 0
+        return self._charger.is_charging_active(enabled)
 
     async def async_turn_on(self, **kwargs):
         await self._charger.set_enabled(True)
@@ -40,10 +39,11 @@ class ChargerSwitch(CoordinatorEntity, SwitchEntity):
         await self.coordinator.async_request_refresh()
 
     @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._charger.ip)},
-            "name": f"EV charger {self._charger.ip}",
-            "manufacturer": "YourManufacturer",
-            "model": self._charger.__class__.__name__,
-        }
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._charger.ip)},
+            name=f"Eveus {self._charger.ip}",
+            manufacturer="Eveus",
+            model=self._charger.model_name,
+            configuration_url=f"http://{self._charger.ip}",
+        )
