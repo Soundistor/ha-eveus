@@ -10,6 +10,6 @@ MODEL_V1 = "v1"
 MODEL_V2 = "v2"
 
 SUPPORTED_MODELS = {
-    MODEL_V1: "Eveus v1 (Bolt)",
-    MODEL_V2: "Eveus v2 (GBT)",
+    MODEL_V1: "Eveus API v1",
+    MODEL_V2: "Eveus API v2",
 }
