@@ -5,7 +5,11 @@ import logging
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
 from .const import (
     DOMAIN,
@@ -26,7 +30,15 @@ _LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_IP_ADDRESS): str,
-        vol.Required(CONF_MODEL, default=MODEL_V1): vol.In(SUPPORTED_MODELS),
+        vol.Required(CONF_MODEL, default=MODEL_V1): SelectSelector(
+            SelectSelectorConfig(
+                options=[
+                    {"value": MODEL_V1, "label": SUPPORTED_MODELS[MODEL_V1]},
+                    {"value": MODEL_V2, "label": SUPPORTED_MODELS[MODEL_V2]},
+                ],
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        ),
         vol.Optional(CONF_USERNAME): str,
         vol.Optional(CONF_PASSWORD): str,
         vol.Optional(CONF_DEVICE_PREFIX, default=""): str,
