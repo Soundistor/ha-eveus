@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import aiohttp
-import async_timeout
-from typing import Any, Dict
 
 
 class BaseCharger:
@@ -12,19 +10,19 @@ class BaseCharger:
     def __init__(self, ip: str, username: str | None = None,
                  password: str | None = None) -> None:
         self.ip = ip
-        self.auth = aiohttp.BasicAuth(username, password) if username else None
+        self.auth = aiohttp.BasicAuth(username, password or "") if username else None
         self.session: aiohttp.ClientSession | None = None
 
-    async def _request(self, method: str, path: str, **kwargs) -> Dict[str, Any]:
+    async def _request(self, method: str, path: str, **kwargs) -> dict:
         url = f"http://{self.ip}{path}"
         if not self.session:
-            timeout = aiohttp.ClientTimeout(total=10)
-            self.session = aiohttp.ClientSession(auth=self.auth, timeout=timeout)
-
-        async with async_timeout.timeout(10):
-            async with self.session.request(method, url, **kwargs) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+            self.session = aiohttp.ClientSession(
+                auth=self.auth,
+                timeout=aiohttp.ClientTimeout(total=10),
+            )
+        async with self.session.request(method, url, **kwargs) as resp:
+            resp.raise_for_status()
+            return await resp.json()
 
     async def get_status(self) -> Dict[str, Any]:
         raise NotImplementedError
