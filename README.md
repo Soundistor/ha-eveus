@@ -19,7 +19,12 @@ Custom integration for Eveus EV chargers (API v1 and v2).
 
 ### HACS
 
-Add this repository as a custom repository in HACS (type: Integration), then install and restart.
+1. Open HACS → **Integrations**.
+2. Click the three-dot menu (⋮) in the top-right corner → **Custom repositories**.
+3. Enter `https://github.com/Soundistor/ha-eveus` and select category **Integration** → **Add**.
+4. Find **Eveus Charger** in the list and click **Download**.
+5. Restart Home Assistant.
+6. **Settings → Integrations → Add → Eveus Charger**.
 
 ## Configuration
 
