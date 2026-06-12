@@ -1,0 +1,24 @@
+# Private HA config (real IPs, credentials, personal automations)
+_HA_config_debr/
+
+# Personal notes
+competitors.md
+
+# API reference / dev tools
+mockData/
+
+# Claude project data
+.claude/
+
+# Stray Claude plan files
+C*Users*.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Editor
+.vscode/settings.json
+*.swp

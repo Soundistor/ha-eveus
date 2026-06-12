@@ -1,59 +1,58 @@
-"""SelectEntity – AI‑mode."""
-
+"""SelectEntity – AI mode."""
 from __future__ import annotations
+
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
 from .const import DOMAIN
 
-AI_MODES = {
-    "Off": 0,
-    "Voltage": 1,
-    "Tesla (auto)": 2,
-    "Power": 3,
-}
-
 SELECT_DESCRIPTION = SelectEntityDescription(
-    key="ai_mode",
-    name="Adaptive mode",
-    options=list(AI_MODES.keys()),
+    key="aiStatus",
+    name="ai_mode",
     icon="mdi:brain",
 )
 
+
 async def async_setup_entry(hass, entry, async_add_entities):
-    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    charger = hass.data[DOMAIN][entry.entry_id]["charger"]
-    async_add_entities([ChargerAIModeSelect(coordinator, charger)], True)
+    data = hass.data[DOMAIN][entry.entry_id]
+    prefix = data.get("prefix", "")
+    async_add_entities(
+        [ChargerAIModeSelect(data["coordinator"], data["charger"], prefix, entry.entry_id)],
+        True,
+    )
 
 
 class ChargerAIModeSelect(CoordinatorEntity, SelectEntity):
-    def __init__(self, coordinator, charger):
+
+    def __init__(self, coordinator, charger, prefix: str, entry_id: str):
         super().__init__(coordinator)
         self._charger = charger
         self.entity_description = SELECT_DESCRIPTION
-        self._attr_unique_id = f"{charger.ip}-{SELECT_DESCRIPTION.key}"
-        self._attr_name = f"{SELECT_DESCRIPTION.name} ({charger.ip})"
+        uid = f"{prefix}_ai_mode" if prefix else f"{entry_id}_ai_mode"
+        self._attr_unique_id = uid
+        self._attr_name = f"{prefix} ai_mode" if prefix else "ai_mode"
+
+    @property
+    def options(self) -> list[str]:
+        return list(self._charger.ai_modes.keys())
 
     @property
     def current_option(self) -> str | None:
-        """Считаем состояние из `aiStatus` (0‑off, 1‑voltage, 2‑auto, 3‑power)."""
-        status = self.coordinator.data.get("aiStatus")
-        if status is None:
-            return None
-        # Наименования могут отличаться в разных моделях
-        reverse = {v: k for k, v in AI_MODES.items()}
-        return reverse.get(int(status))
+        # transform_data already mapped aiStatus to a string like "Off", "Voltage"
+        return self.coordinator.data.get("aiStatus")
 
     async def async_select_option(self, option: str) -> None:
-        """Пользователь выбрал вариант → отправляем запрос."""
-        mode = AI_MODES[option]
+        mode = self._charger.ai_modes[option]
         await self._charger.set_ai_mode(mode)
         await self.coordinator.async_request_refresh()
 
     @property
-    def device_info(self):
-        return {
-            "identifiers": {(DOMAIN, self._charger.ip)},
-            "name": f"EV charger {self._charger.ip}",
-            "manufacturer": "YourManufacturer",
-            "model": self._charger.__class__.__name__,
-        }
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._charger.ip)},
+            name=f"Eveus {self._charger.ip}",
+            manufacturer="Eveus",
+            model=self._charger.model_name,
+            configuration_url=f"http://{self._charger.ip}",
+        )
