@@ -47,7 +47,7 @@ Custom integration for Eveus EV chargers (API v1 and v2).
 | Model | `v1` or `v2` |
 | Username | Optional (leave blank if not set) |
 | Password | Optional (leave blank if not set) |
-| Device prefix | Prefix for entity IDs, e.g. `gbt_eveus` or `evse_eveus` |
+| Device prefix | Prefix for entity IDs, e.g. `eveus_1` or `eveus_home` |
 
 The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sensor.eveus_1_state`, `sensor.eveus_1_currentset`, etc. Set it to match your existing automations.
 
@@ -87,7 +87,7 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 
 | Platform | Entity | Notes |
 |----------|--------|-------|
-| `switch` | `enabled` | Start / stop charging |
+| `switch` | `charging` | Start / stop charging |
 | `number` | `current_set` | Charging current setpoint |
 | `select` | `ai_mode` | AI mode selector |
 | `binary_sensor` | `ground` | Ground connection OK |
@@ -95,7 +95,17 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | `button` | `force_refresh` | Force data update |
 | `button` | `sync_time` | Sync charger clock to HA time (V2 only) |
 
+## Localizations
+
+UI strings are available in English, Russian (ru), and Ukrainian (uk).
+
+## Diagnostics
+
+Standard HA diagnostics are supported: **Settings → Integrations → Eveus → Download diagnostics**. IP address, username, and password are redacted in the output.
+
 ## Notes
 
+- Polling interval is dynamic: 30 s while charging, 60 s otherwise.
+- `ground` and `groundctrl` use debounce (3 consecutive polls) to suppress transient glitches; firmware fault states bypass debounce and trigger immediately.
 - `groundctrl` uses value `2` for active (not `1`) — handled correctly.
 - All entity names are lowercase to match legacy YAML-based unique IDs and preserve automations.
