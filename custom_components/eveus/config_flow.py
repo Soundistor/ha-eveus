@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, Mapping
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -75,6 +76,44 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]):
+        self._reauth_entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"]
+        )
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            ip = self._reauth_entry.data[CONF_IP_ADDRESS]
+            model = self._reauth_entry.data[CONF_MODEL]
+            username = user_input.get(CONF_USERNAME)
+            password = user_input.get(CONF_PASSWORD)
+            if await self._test_connection(ip, model, username, password):
+                self.hass.config_entries.async_update_entry(
+                    self._reauth_entry,
+                    data={
+                        **self._reauth_entry.data,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                    },
+                )
+                await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+            errors["base"] = "cannot_connect"
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_USERNAME): str,
+                vol.Optional(CONF_PASSWORD): str,
+            }),
+            description_placeholders={
+                "ip_address": self._reauth_entry.data[CONF_IP_ADDRESS],
+            },
+            errors=errors,
+        )
+
     async def _test_connection(self, ip: str, model: str,
                                username: str | None, password: str | None) -> bool:
         try:
@@ -85,27 +124,3 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except Exception as exc:
             _LOGGER.debug("Cannot connect to %s (%s): %s", ip, model, exc)
             return False
-
-    @staticmethod
-    def async_get_options_flow(entry: config_entries.ConfigEntry):
-        return MyEVChargerOptionsFlowHandler(entry)
-
-
-class MyEVChargerOptionsFlowHandler(config_entries.OptionsFlow):
-
-    def __init__(self, entry: config_entries.ConfigEntry):
-        self.entry = entry
-
-    async def async_step_init(self, user_input=None):
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    "update_interval",
-                    default=self.entry.options.get("update_interval", 30),
-                ): vol.All(int, vol.Range(min=5, max=300))
-            }
-        )
-        return self.async_show_form(step_id="init", data_schema=schema)

@@ -10,6 +10,7 @@ from .const import DOMAIN
 SELECT_DESCRIPTION = SelectEntityDescription(
     key="aiStatus",
     name="ai_mode",
+    translation_key="ai_mode",
     icon="mdi:brain",
 )
 
@@ -25,13 +26,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class ChargerAIModeSelect(CoordinatorEntity, SelectEntity):
 
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator, charger, prefix: str, entry_id: str):
         super().__init__(coordinator)
         self._charger = charger
         self.entity_description = SELECT_DESCRIPTION
         uid = f"{prefix}_ai_mode" if prefix else f"{entry_id}_ai_mode"
         self._attr_unique_id = uid
-        self._attr_name = f"{prefix} ai_mode" if prefix else "ai_mode"
 
     @property
     def options(self) -> list[str]:

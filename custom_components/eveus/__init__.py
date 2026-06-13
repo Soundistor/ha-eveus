@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
@@ -17,6 +16,13 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "select", "button"]
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if entry.version > 1:
+        _LOGGER.error("Migration from config entry version %s is not supported", entry.version)
+        return False
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ip = entry.data["ip_address"]
     model = entry.data["model"]
@@ -26,11 +32,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     charger = ChargerV1(ip, username, password) if model == MODEL_V1 else ChargerV2(ip, username, password)
 
-    coordinator = ChargerCoordinator(
-        hass,
-        charger,
-        update_interval=entry.options.get("update_interval", 30),
-    )
+    coordinator = ChargerCoordinator(hass, charger)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})
@@ -59,7 +61,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, "set_current", async_set_current)
     hass.services.async_register(DOMAIN, "set_ai_mode", async_set_ai_mode)
 
-    entry.async_on_unload(entry.add_update_listener(_async_update_options))
     return True
 
 
@@ -71,8 +72,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator: ChargerCoordinator = data["coordinator"]
-    coordinator.update_interval = timedelta(seconds=entry.options.get("update_interval", 30))
-    await coordinator.async_request_refresh()

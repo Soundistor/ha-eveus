@@ -6,17 +6,21 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
+from homeassistant.core import callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+from .coordinator import FIRMWARE_FAULT_STATES
 
 # ground=1 → защита активна; groundCtrl=2 → активна (не просто truthy!)
 _ACTIVE_VALUE = {"ground": 1, "groundCtrl": 2}
 
+DEBOUNCE_THRESHOLD = 3
+
 BINARY_SENSORS = [
-    BinarySensorEntityDescription(key="ground",     name="ground",     device_class=BinarySensorDeviceClass.SAFETY),
-    BinarySensorEntityDescription(key="groundCtrl", name="groundctrl", device_class=BinarySensorDeviceClass.SAFETY),
+    BinarySensorEntityDescription(key="ground",     name="ground",     translation_key="ground",      device_class=BinarySensorDeviceClass.SAFETY),
+    BinarySensorEntityDescription(key="groundCtrl", name="groundctrl", translation_key="ground_ctrl", device_class=BinarySensorDeviceClass.SAFETY),
 ]
 
 
@@ -36,6 +40,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class ChargerBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator, charger, description: BinarySensorEntityDescription,
                  prefix: str, entry_id: str):
         super().__init__(coordinator)
@@ -43,12 +49,30 @@ class ChargerBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self.entity_description = description
         uid = f"{prefix}_{description.name}" if prefix else f"{entry_id}_{description.name}"
         self._attr_unique_id = uid
-        self._attr_name = f"{prefix} {description.name}" if prefix else description.name
+        self._debounce_count = 0
+        self._debounced_on = False
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        if self.coordinator.data:
+            val = self.coordinator.data.get(self.entity_description.key)
+            raw_on = val == _ACTIVE_VALUE[self.entity_description.key]
+            # Firmware faults bypass debounce — trigger immediately
+            state = self.coordinator.data.get("state", "")
+            substate = self.coordinator.data.get("subState", "")
+            is_firmware_fault = state in FIRMWARE_FAULT_STATES or substate in FIRMWARE_FAULT_STATES
+            if is_firmware_fault:
+                self._debounce_count = DEBOUNCE_THRESHOLD if raw_on else 0
+            elif raw_on:
+                self._debounce_count = min(self._debounce_count + 1, DEBOUNCE_THRESHOLD)
+            else:
+                self._debounce_count = 0
+            self._debounced_on = self._debounce_count >= DEBOUNCE_THRESHOLD
+        super()._handle_coordinator_update()
 
     @property
     def is_on(self) -> bool:
-        val = self.coordinator.data.get(self.entity_description.key)
-        return val == _ACTIVE_VALUE[self.entity_description.key]
+        return self._debounced_on
 
     @property
     def device_info(self) -> DeviceInfo:

@@ -10,6 +10,7 @@ from .const import DOMAIN
 NUMBER_DESCRIPTION = NumberEntityDescription(
     key="currentSet",
     name="current_set",
+    translation_key="current_set",
     native_max_value=32,
     native_step=1,
     native_unit_of_measurement="A",
@@ -28,13 +29,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class ChargerCurrentNumber(CoordinatorEntity, NumberEntity):
 
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator, charger, prefix: str, entry_id: str):
         super().__init__(coordinator)
         self._charger = charger
         self.entity_description = NUMBER_DESCRIPTION
         uid = f"{prefix}_current_set" if prefix else f"{entry_id}_current_set"
         self._attr_unique_id = uid
-        self._attr_name = f"{prefix} current_set" if prefix else "current_set"
 
     @property
     def native_min_value(self) -> float:

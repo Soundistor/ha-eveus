@@ -17,23 +17,153 @@
           "password": "Leave empty if the charger has no authentication configured.",
           "device_prefix": "Prefix for all entity IDs. For example, prefix 'eveus_home' produces sensor.eveus_home_state, sensor.eveus_home_currentset, etc. Leave empty to use the entry ID."
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Eveus Charger",
+        "description": "The credentials for {ip_address} are no longer valid. Enter new credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Leave empty if the charger has no authentication configured.",
+          "password": "Leave empty if the charger has no authentication configured."
+        }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect to the charger. Check the IP address and that the charger is reachable."
+    },
+    "abort": {
+      "already_configured": "This charger is already configured.",
+      "reauth_successful": "Re-authentication was successful."
     }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Options",
-        "data": {
-          "update_interval": "Update interval (seconds)"
-        },
-        "data_description": {
-          "update_interval": "How often to poll the charger for new data. Range: 5–300 seconds."
+  "issues": {
+    "cannot_connect": {
+      "title": "Cannot connect to Eveus charger",
+      "description": "The integration cannot reach the Eveus charger. Check that the device is powered on and reachable on your network, then reload the integration."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "state": {
+        "name": "State",
+        "state": {
+          "no_data": "No data",
+          "ready": "Ready",
+          "waiting": "Waiting",
+          "charging": "Charging",
+          "current_leak": "Current Leak",
+          "cpu_error": "CPU Error",
+          "no_ground": "No Ground",
+          "overheat_plug": "Overheat Plug",
+          "overheat_relay": "Overheat Relay",
+          "overcurrent": "Overcurrent",
+          "overvoltage": "Overvoltage",
+          "undervoltage": "Undervoltage",
+          "limited_by_time": "Limited by Time",
+          "limited_by_energy": "Limited by Energy",
+          "limited_by_money": "Limited by Money",
+          "limited_by_schedule1": "Limited by Schedule 1",
+          "limited_by_schedule2": "Limited by Schedule 2",
+          "disabled_by_user": "Disabled by User",
+          "relay_stuck": "Relay Stuck",
+          "limited_by_ai_mode": "Limited by AI Mode",
+          "startup": "Startup",
+          "system_test": "System Test",
+          "standby": "Standby",
+          "connected": "Connected",
+          "charge_complete": "Charge Complete",
+          "paused": "Paused",
+          "error": "Error",
+          "unknown": "Unknown"
+        }
+      },
+      "current_set": { "name": "Set Current" },
+      "cur_design": { "name": "Design Current" },
+      "volt_meas": { "name": "Voltage" },
+      "cur_meas": { "name": "Current" },
+      "power_meas": { "name": "Power" },
+      "temperature1": { "name": "Internal Temperature" },
+      "temperature2": { "name": "Plug Temperature" },
+      "ai_status": {
+        "name": "AI Status",
+        "state": {
+          "off": "Off",
+          "voltage": "Voltage",
+          "tesla_auto": "Tesla (auto)",
+          "power": "Power",
+          "unknown": "Unknown"
+        }
+      },
+      "ai_voltage": { "name": "AI Voltage" },
+      "session_time": { "name": "Session Time" },
+      "session_energy": { "name": "Session Energy" },
+      "total_energy": { "name": "Total Energy" },
+      "system_time": { "name": "System Time" },
+      "leak_value": { "name": "Leak Current" },
+      "sub_state": {
+        "name": "Sub-state",
+        "state": {
+          "no_error": "No Error",
+          "grounding_error": "Grounding Error",
+          "current_leak_high": "Current Leak High",
+          "relay_error": "Relay Error",
+          "current_leak_low": "Current Leak Low",
+          "box_overheat": "Box Overheat",
+          "plug_overheat": "Plug Overheat",
+          "pilot_error": "Pilot Error",
+          "low_voltage": "Low Voltage",
+          "diode_error": "Diode Error",
+          "overcurrent": "Overcurrent",
+          "interface_timeout": "Interface Timeout",
+          "software_failure": "Software Failure",
+          "gfci_test_failure": "GFCI Test Failure",
+          "high_voltage": "High Voltage",
+          "no_limits": "No Limits",
+          "limited_by_user": "Limited by User",
+          "energy_limit": "Energy Limit",
+          "time_limit": "Time Limit",
+          "cost_limit": "Cost Limit",
+          "schedule1_limit": "Schedule 1 Limit",
+          "schedule1_energy_limit": "Schedule 1 Energy Limit",
+          "schedule2_limit": "Schedule 2 Limit",
+          "schedule2_energy_limit": "Schedule 2 Energy Limit",
+          "waiting_for_activation": "Waiting for Activation",
+          "paused_by_adaptive_mode": "Paused by Adaptive Mode",
+          "unknown": "Unknown"
+        }
+      },
+      "v_bat": { "name": "Battery Voltage" },
+      "rssi": { "name": "Wi-Fi Signal" },
+      "iem1": { "name": "Energy Meter 1" },
+      "iem2": { "name": "Energy Meter 2" }
+    },
+    "binary_sensor": {
+      "ground": { "name": "Ground" },
+      "ground_ctrl": { "name": "Ground Control" }
+    },
+    "switch": {
+      "charging": { "name": "Charging" }
+    },
+    "number": {
+      "current_set": { "name": "Charging Current" }
+    },
+    "select": {
+      "ai_mode": {
+        "name": "AI Mode",
+        "state": {
+          "off": "Off",
+          "voltage": "Voltage",
+          "tesla_auto": "Tesla (auto)",
+          "power": "Power"
         }
       }
+    },
+    "button": {
+      "force_refresh": { "name": "Force Refresh" },
+      "sync_time": { "name": "Sync Time" }
     }
   }
 }

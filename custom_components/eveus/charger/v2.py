@@ -5,27 +5,27 @@ from datetime import datetime, timezone
 from .base import BaseCharger
 
 V2_STATE_MAP = {
-    0: "Startup",   1: "System Test",   2: "Standby",
-    3: "Connected", 4: "Charging",      5: "Charge Complete",
-    6: "Paused",    7: "Error",
+    0: "startup",      1: "system_test",      2: "standby",
+    3: "connected",    4: "charging",         5: "charge_complete",
+    6: "paused",       7: "error",
 }
 
 V2_SUBSTATE_ERROR_MAP = {
-    0: "No Error",          1: "Grounding Error",       2: "Current Leak High",
-    3: "Relay Error",       4: "Current Leak Low",      5: "Box Overheat",
-    6: "Plug Overheat",     7: "Pilot Error",           8: "Low Voltage",
-    9: "Diode Error",      10: "Overcurrent",          11: "Interface Timeout",
-    12: "Software Failure", 13: "GFCI Test Failure",   14: "High Voltage",
+    0: "no_error",           1: "grounding_error",        2: "current_leak_high",
+    3: "relay_error",        4: "current_leak_low",       5: "box_overheat",
+    6: "plug_overheat",      7: "pilot_error",            8: "low_voltage",
+    9: "diode_error",       10: "overcurrent",           11: "interface_timeout",
+   12: "software_failure",  13: "gfci_test_failure",     14: "high_voltage",
 }
 
 V2_SUBSTATE_LIMIT_MAP = {
-    0: "No Limits",              1: "Limited by User",           2: "Energy Limit",
-    3: "Time Limit",             4: "Cost Limit",                5: "Schedule 1 Limit",
-    6: "Schedule 1 Energy Limit", 7: "Schedule 2 Limit",        8: "Schedule 2 Energy Limit",
-    9: "Waiting for Activation", 10: "Paused by Adaptive Mode",
+    0: "no_limits",               1: "limited_by_user",           2: "energy_limit",
+    3: "time_limit",              4: "cost_limit",                5: "schedule1_limit",
+    6: "schedule1_energy_limit",  7: "schedule2_limit",          8: "schedule2_energy_limit",
+    9: "waiting_for_activation", 10: "paused_by_adaptive_mode",
 }
 
-AI_MODE_MAP = {0: "Off", 1: "Voltage", 2: "Tesla (auto)", 3: "Power"}
+AI_MODE_MAP = {0: "off", 1: "voltage", 2: "tesla_auto", 3: "power"}
 
 
 class ChargerV2(BaseCharger):
@@ -78,7 +78,7 @@ class ChargerV2(BaseCharger):
 
     @property
     def ai_modes(self) -> dict:
-        return {"Off": 0, "Voltage": 1, "Tesla (auto)": 2, "Power": 3}
+        return {"off": 0, "voltage": 1, "tesla_auto": 2, "power": 3}
 
     @property
     def capabilities(self) -> set:
@@ -89,7 +89,7 @@ class ChargerV2(BaseCharger):
             "aiStatus", "aiVoltage",
             "ground", "groundCtrl",
             "sessionTime", "sessionEnergy", "totalEnergy",
-            "systemTime", "leakValue", "newsessiontime",
+            "systemTime", "leakValue",
             "vBat", "RSSI",
             "IEM1", "IEM2",
             "sync_time",
@@ -98,26 +98,20 @@ class ChargerV2(BaseCharger):
     def transform_data(self, raw: dict) -> dict:
         raw = dict(raw)
         state_num = int(raw.get("state", 0))
-        raw["state"] = V2_STATE_MAP.get(state_num, "Unknown")
+        raw["state"] = V2_STATE_MAP.get(state_num, "unknown")
         # subState depends on whether we're in error state
         substate_num = raw.get("subState")
         if substate_num is None:
             raw["subState"] = "unknown"
         else:
             mapper = V2_SUBSTATE_ERROR_MAP if state_num == 7 else V2_SUBSTATE_LIMIT_MAP
-            raw["subState"] = mapper.get(int(substate_num), "Unknown")
-        raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "Unknown")
-        # systemTime: unix timestamp → "DD.MM.YYYY HH:MM:SS"
+            raw["subState"] = mapper.get(int(substate_num), "unknown")
+        raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "unknown")
+        # systemTime: unix timestamp → UTC datetime object (device_class=TIMESTAMP)
         sys_time = raw.get("systemTime")
         if sys_time:
             try:
-                dt = datetime.fromtimestamp(int(sys_time), tz=timezone.utc)
-                raw["systemTime"] = dt.strftime("%d.%m.%Y %H:%M:%S")
+                raw["systemTime"] = datetime.fromtimestamp(int(sys_time), tz=timezone.utc)
             except (ValueError, OSError):
-                pass
-        # newsessiontime: sessionTime seconds → "HH:MM:SS"
-        secs = int(raw.get("sessionTime", 0))
-        h, rem = divmod(secs, 3600)
-        m, s = divmod(rem, 60)
-        raw["newsessiontime"] = f"{h:02d}:{m:02d}:{s:02d}"
+                raw["systemTime"] = None
         return raw
