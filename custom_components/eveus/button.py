@@ -10,12 +10,14 @@ from .const import DOMAIN
 BUTTON_FORCE_REFRESH = ButtonEntityDescription(
     key="force_refresh",
     name="force_refresh",
+    translation_key="force_refresh",
     icon="mdi:refresh",
 )
 
 BUTTON_SYNC_TIME = ButtonEntityDescription(
     key="sync_time",
     name="sync_time",
+    translation_key="sync_time",
     icon="mdi:clock-check",
 )
 
@@ -35,6 +37,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class ChargerButton(CoordinatorEntity, ButtonEntity):
 
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator, charger, description: ButtonEntityDescription,
                  prefix: str, entry_id: str):
         super().__init__(coordinator)
@@ -42,7 +46,6 @@ class ChargerButton(CoordinatorEntity, ButtonEntity):
         self.entity_description = description
         uid = f"{prefix}_{description.name}" if prefix else f"{entry_id}_{description.name}"
         self._attr_unique_id = uid
-        self._attr_name = f"{prefix} {description.name}" if prefix else description.name
 
     async def async_press(self) -> None:
         if self.entity_description.key == "force_refresh":

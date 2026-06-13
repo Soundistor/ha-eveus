@@ -16,12 +16,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 class ChargerSwitch(CoordinatorEntity, SwitchEntity):
 
+    _attr_has_entity_name = True
+    _attr_translation_key = "charging"
+
     def __init__(self, coordinator, charger, prefix: str, entry_id: str):
         super().__init__(coordinator)
         self._charger = charger
         uid = f"{prefix}_charging" if prefix else f"{entry_id}_charging"
         self._attr_unique_id = uid
-        self._attr_name = f"{prefix} charging" if prefix else "charging"
 
     @property
     def is_on(self) -> bool:

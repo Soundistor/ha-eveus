@@ -1,0 +1,169 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Добавить зарядную станцию Eveus",
+        "data": {
+          "ip_address": "IP-адрес",
+          "model": "Версия API",
+          "username": "Имя пользователя",
+          "password": "Пароль",
+          "device_prefix": "Префикс устройства"
+        },
+        "data_description": {
+          "ip_address": "Локальный IP-адрес зарядной станции в вашей сети.",
+          "model": "v1 — старая прошивка (41 поле, целые числа). v2 — новая прошивка (97 полей, подсостояние, счётчики IEM, сигнал Wi-Fi).",
+          "username": "Оставьте пустым, если аутентификация не настроена.",
+          "password": "Оставьте пустым, если аутентификация не настроена.",
+          "device_prefix": "Префикс для всех идентификаторов объектов. Например, префикс 'eveus_home' создаёт sensor.eveus_home_state и т.д. Оставьте пустым для использования ID записи."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Повторная аутентификация Eveus",
+        "description": "Учётные данные для {ip_address} больше не действительны. Введите новые.",
+        "data": {
+          "username": "Имя пользователя",
+          "password": "Пароль"
+        },
+        "data_description": {
+          "username": "Оставьте пустым, если аутентификация не настроена.",
+          "password": "Оставьте пустым, если аутентификация не настроена."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не удаётся подключиться к зарядной станции. Проверьте IP-адрес и доступность устройства."
+    },
+    "abort": {
+      "already_configured": "Эта зарядная станция уже настроена.",
+      "reauth_successful": "Повторная аутентификация выполнена успешно."
+    }
+  },
+  "issues": {
+    "cannot_connect": {
+      "title": "Нет связи с зарядной станцией Eveus",
+      "description": "Интеграция не может связаться с зарядной станцией Eveus. Убедитесь, что устройство включено и доступно в сети, затем перезагрузите интеграцию."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "state": {
+        "name": "Состояние",
+        "state": {
+          "no_data": "Нет данных",
+          "ready": "Готово",
+          "waiting": "Ожидание",
+          "charging": "Зарядка",
+          "current_leak": "Утечка тока",
+          "cpu_error": "Ошибка ЦП",
+          "no_ground": "Нет заземления",
+          "overheat_plug": "Перегрев разъёма",
+          "overheat_relay": "Перегрев реле",
+          "overcurrent": "Превышение тока",
+          "overvoltage": "Превышение напряжения",
+          "undervoltage": "Пониженное напряжение",
+          "limited_by_time": "Ограничено по времени",
+          "limited_by_energy": "Ограничено по энергии",
+          "limited_by_money": "Ограничено по средствам",
+          "limited_by_schedule1": "Ограничено расписанием 1",
+          "limited_by_schedule2": "Ограничено расписанием 2",
+          "disabled_by_user": "Отключено пользователем",
+          "relay_stuck": "Реле застряло",
+          "limited_by_ai_mode": "Ограничено AI-режимом",
+          "startup": "Запуск",
+          "system_test": "Системное тестирование",
+          "standby": "Режим ожидания",
+          "connected": "Подключено",
+          "charge_complete": "Зарядка завершена",
+          "paused": "Приостановлено",
+          "error": "Ошибка",
+          "unknown": "Неизвестно"
+        }
+      },
+      "current_set": { "name": "Установленный ток" },
+      "cur_design": { "name": "Проектный ток" },
+      "volt_meas": { "name": "Напряжение" },
+      "cur_meas": { "name": "Ток" },
+      "power_meas": { "name": "Мощность" },
+      "temperature1": { "name": "Внутренняя температура" },
+      "temperature2": { "name": "Температура разъёма" },
+      "ai_status": {
+        "name": "Статус AI",
+        "state": {
+          "off": "Выключено",
+          "voltage": "Напряжение",
+          "tesla_auto": "Tesla (авто)",
+          "power": "Мощность",
+          "unknown": "Неизвестно"
+        }
+      },
+      "ai_voltage": { "name": "Напряжение AI" },
+      "session_time": { "name": "Время сессии" },
+      "session_energy": { "name": "Энергия сессии" },
+      "total_energy": { "name": "Суммарная энергия" },
+      "system_time": { "name": "Системное время" },
+      "leak_value": { "name": "Ток утечки" },
+      "sub_state": {
+        "name": "Подсостояние",
+        "state": {
+          "no_error": "Ошибок нет",
+          "grounding_error": "Ошибка заземления",
+          "current_leak_high": "Большая утечка тока",
+          "relay_error": "Ошибка реле",
+          "current_leak_low": "Малая утечка тока",
+          "box_overheat": "Перегрев корпуса",
+          "plug_overheat": "Перегрев разъёма",
+          "pilot_error": "Ошибка пилот-сигнала",
+          "low_voltage": "Низкое напряжение",
+          "diode_error": "Ошибка диода",
+          "overcurrent": "Превышение тока",
+          "interface_timeout": "Таймаут интерфейса",
+          "software_failure": "Сбой программного обеспечения",
+          "gfci_test_failure": "Сбой теста GFCI",
+          "high_voltage": "Высокое напряжение",
+          "no_limits": "Без ограничений",
+          "limited_by_user": "Ограничено пользователем",
+          "energy_limit": "Лимит энергии",
+          "time_limit": "Лимит времени",
+          "cost_limit": "Лимит стоимости",
+          "schedule1_limit": "Лимит расписания 1",
+          "schedule1_energy_limit": "Лимит энергии расписания 1",
+          "schedule2_limit": "Лимит расписания 2",
+          "schedule2_energy_limit": "Лимит энергии расписания 2",
+          "waiting_for_activation": "Ожидание активации",
+          "paused_by_adaptive_mode": "Приостановлено адаптивным режимом",
+          "unknown": "Неизвестно"
+        }
+      },
+      "v_bat": { "name": "Напряжение батареи" },
+      "rssi": { "name": "Сигнал Wi-Fi" },
+      "iem1": { "name": "Счётчик энергии 1" },
+      "iem2": { "name": "Счётчик энергии 2" }
+    },
+    "binary_sensor": {
+      "ground": { "name": "Заземление" },
+      "ground_ctrl": { "name": "Контроль заземления" }
+    },
+    "switch": {
+      "charging": { "name": "Зарядка" }
+    },
+    "number": {
+      "current_set": { "name": "Ток зарядки" }
+    },
+    "select": {
+      "ai_mode": {
+        "name": "Режим AI",
+        "state": {
+          "off": "Выключено",
+          "voltage": "Напряжение",
+          "tesla_auto": "Tesla (авто)",
+          "power": "Мощность"
+        }
+      }
+    },
+    "button": {
+      "force_refresh": { "name": "Принудительное обновление" },
+      "sync_time": { "name": "Синхронизация времени" }
+    }
+  }
+}

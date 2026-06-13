@@ -1,20 +1,22 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from .base import BaseCharger
 
 V1_STATE_MAP = {
-    0: "No data",    1: "Ready",              2: "Waiting",
-    3: "Charging",   4: "Charging",           5: "Charging",
-    6: "Charging",   7: "Current Leak",       8: "CPU ERROR",
-    9: "No Ground",  10: "Overheat Plug",     11: "Overheat Relay",
-    12: "OverCurrent", 13: "OverVoltage",     14: "UnderVoltage",
-    15: "Limited By Time",    16: "Limited By Energy",
-    17: "Limited By Money",   18: "Limited By Schedule1",
-    19: "Limited By Schedule2", 20: "Disabled By User",
-    21: "Relay Stuck",          22: "Limited By AI Mode",
+    0: "no_data",      1: "ready",                  2: "waiting",
+    3: "charging",     4: "charging",               5: "charging",
+    6: "charging",     7: "current_leak",            8: "cpu_error",
+    9: "no_ground",   10: "overheat_plug",          11: "overheat_relay",
+    12: "overcurrent", 13: "overvoltage",            14: "undervoltage",
+    15: "limited_by_time",    16: "limited_by_energy",
+    17: "limited_by_money",   18: "limited_by_schedule1",
+    19: "limited_by_schedule2", 20: "disabled_by_user",
+    21: "relay_stuck",           22: "limited_by_ai_mode",
 }
 
-AI_MODE_MAP = {0: "Off", 1: "Voltage", 2: "Tesla (auto)", 3: "Power"}
+AI_MODE_MAP = {0: "off", 1: "voltage", 2: "tesla_auto", 3: "power"}
 
 
 class ChargerV1(BaseCharger):
@@ -58,7 +60,7 @@ class ChargerV1(BaseCharger):
 
     @property
     def ai_modes(self) -> dict:
-        return {"Off": 0, "Voltage": 1}
+        return {"off": 0, "voltage": 1}
 
     @property
     def capabilities(self) -> set:
@@ -69,7 +71,7 @@ class ChargerV1(BaseCharger):
             "aiStatus", "aiVoltage",
             "ground", "groundCtrl",
             "sessionTime", "sessionEnergy", "totalEnergy",
-            "systemTime", "leakValue", "newsessiontime",
+            "systemTime", "leakValue",
         }
 
     def transform_data(self, raw: dict) -> dict:
@@ -83,12 +85,16 @@ class ChargerV1(BaseCharger):
         raw["sessionEnergy"] = round(int(raw.get("sessionEnergy", 0)) * 0.1, 3)
         raw["totalEnergy"] = round(int(raw.get("totalEnergy", 0)) * 0.1, 3)
         # Map enums to strings
-        raw["state"] = V1_STATE_MAP.get(int(raw.get("state", 0)), "Unknown")
-        raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "Unknown")
-        # systemTime stays as "HH:MM:SS" string
-        # newsessiontime: sessionTime seconds → "HH:MM:SS"
-        secs = int(raw.get("sessionTime", 0))
-        h, rem = divmod(secs, 3600)
-        m, s = divmod(rem, 60)
-        raw["newsessiontime"] = f"{h:02d}:{m:02d}:{s:02d}"
+        raw["state"] = V1_STATE_MAP.get(int(raw.get("state", 0)), "unknown")
+        raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "unknown")
+        # systemTime: "HH:MM:SS" from device → timezone-aware datetime (today's local date)
+        sys_time = raw.get("systemTime")
+        if sys_time:
+            try:
+                t = datetime.strptime(sys_time, "%H:%M:%S").time()
+                raw["systemTime"] = datetime.now().astimezone().replace(
+                    hour=t.hour, minute=t.minute, second=t.second, microsecond=0
+                )
+            except ValueError:
+                raw["systemTime"] = None
         return raw
