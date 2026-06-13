@@ -66,8 +66,8 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | `temperature2` | °C | Sensor 2 |
 | `aistatus` | — | Active AI mode |
 | `aivoltage` | V | AI voltage setpoint |
+| `curdesign` | A | Design max current |
 | `sessiontime` | s | Session duration (raw seconds) |
-| `newsessiontime` | — | Session duration formatted HH:MM:SS |
 | `sessionenergy` | kWh | Energy this session |
 | `totalenergy` | kWh | Total energy (cumulative) |
 | `systemtime` | — | Charger clock |
@@ -78,7 +78,6 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | Entity | Unit | Notes |
 |--------|------|-------|
 | `substate` | — | Detailed sub-state (limit or error) |
-| `curdesign` | A | Design max current |
 | `vbat` | V | Battery voltage (diagnostic) |
 | `rssi` | dBm | Wi-Fi signal (diagnostic) |
 | `iem1` | kWh | Energy meter 1 (cumulative) |
