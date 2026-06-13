@@ -4,10 +4,23 @@ Custom integration for Eveus EV chargers (API v1 and v2).
 
 ## Supported devices
 
-| API version | Fields | Min current |
-|-------------|--------|-------------|
-| v1 | 41 | 7 A |
-| v2 | 97 | 6 A |
+| API version | Min current | JSON fields |
+|-------------|-------------|-------------|
+| v1 | 7 A | 41 |
+| v2 | 6 A | 97 |
+
+### v1 vs v2 differences
+
+| Feature | v1 | v2 |
+|---------|----|----|
+| `evseEnabled` polarity | `1` = charging active | `0` = charging active |
+| State model | 22 states — errors and limits encoded in single `state` field | 8 top-level states in `state` + `subState` for limit / error detail |
+| AI modes | Off, Voltage | Off, Voltage, Tesla (auto), Power |
+| `systemTime` format | `"HH:MM:SS"` string | Unix timestamp (integer) |
+| Measurement values | Raw integers — `curMeas1` and energy fields scaled ×0.1 | Real floats in native units |
+| `powerMeas` | Not in response — calculated from V × I | Reported directly by device |
+| Extra sensors | — | `subState`, `vBat`, `RSSI`, `IEM1`, `IEM2` |
+| Time sync | — | `sync_time` button (writes Unix timestamp to device) |
 
 ## Installation
 
@@ -85,6 +98,5 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 
 ## Notes
 
-- **API v1** `evseEnabled=1` means charging active; **API v2** `evseEnabled=0` means charging active.
 - `groundctrl` uses value `2` for active (not `1`) — handled correctly.
 - All entity names are lowercase to match legacy YAML-based unique IDs and preserve automations.
