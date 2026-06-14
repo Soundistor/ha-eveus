@@ -108,6 +108,7 @@ Standard HA diagnostics are supported: **Settings → Integrations → Eveus →
 ## Notes
 
 - Polling interval is dynamic: 30 s while charging, 60 s otherwise.
+- When the charger is powered off or unplugged, its entities simply become **unavailable** — this is normal and does **not** raise a repair issue. A repair issue is only created when the charger is reachable but returns an error (e.g. wrong credentials, or the configured API version not matching the firmware).
 - `ground` and `groundctrl` use debounce (3 consecutive polls) to suppress transient glitches; firmware fault states bypass debounce and trigger immediately.
 - `groundctrl` uses value `2` for active (not `1`) — handled correctly.
 - All entity names are lowercase to match legacy YAML-based unique IDs and preserve automations.
