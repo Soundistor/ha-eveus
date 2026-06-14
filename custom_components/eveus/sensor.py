@@ -1,6 +1,8 @@
 """Сенсоры зарядки."""
 from __future__ import annotations
 
+from datetime import date
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -10,6 +12,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import EntityCategory
 from homeassistant.core import callback
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
@@ -149,6 +152,26 @@ _SESSION_ENERGY_DESCRIPTION = SensorEntityDescription(
     state_class=SensorStateClass.TOTAL,
 )
 
+_DAILY_ENERGY_DESCRIPTION = SensorEntityDescription(
+    key="totalEnergy",
+    name="energy_daily",
+    translation_key="energy_daily",
+    native_unit_of_measurement="kWh",
+    device_class=SensorDeviceClass.ENERGY,
+    state_class=SensorStateClass.TOTAL,
+    icon="mdi:counter",
+)
+
+_DAILY_SESSION_TIME_DESCRIPTION = SensorEntityDescription(
+    key="sessionTime",
+    name="session_time_daily",
+    translation_key="session_time_daily",
+    native_unit_of_measurement="h",
+    device_class=SensorDeviceClass.DURATION,
+    state_class=SensorStateClass.TOTAL,
+    icon="mdi:av-timer",
+)
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
@@ -163,6 +186,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.append(ChargerSensor(coordinator, charger, description, prefix, entry.entry_id))
     if "sessionEnergy" in charger.capabilities:
         entities.append(SessionEnergySensor(coordinator, charger, _SESSION_ENERGY_DESCRIPTION, prefix, entry.entry_id))
+    if "totalEnergy" in charger.capabilities:
+        entities.append(DailyEnergySensor(coordinator, charger, prefix, entry.entry_id))
+    if "sessionTime" in charger.capabilities:
+        entities.append(DailySessionTimeSensor(coordinator, charger, prefix, entry.entry_id))
     async_add_entities(entities, True)
 
 
@@ -209,4 +236,116 @@ class SessionEnergySensor(ChargerSensor):
         if self._prev_energy is not None and current is not None and current < self._prev_energy:
             self._attr_last_reset = dt_util.utcnow()
         self._prev_energy = current
+        super()._handle_coordinator_update()
+
+
+class DailyEnergySensor(ChargerSensor, RestoreEntity):
+    """Daily charging energy — total_energy delta from midnight."""
+
+    def __init__(self, coordinator, charger, prefix, entry_id):
+        super().__init__(coordinator, charger, _DAILY_ENERGY_DESCRIPTION, prefix, entry_id)
+        self._baseline: float | None = None
+        self._computed: float | None = None
+        self._current_date: date | None = None
+        self._attr_last_reset = None
+
+    @property
+    def native_value(self):
+        return self._computed
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "date": self._current_date.isoformat() if self._current_date else None,
+            "baseline_kwh": self._baseline,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        today = dt_util.now().date()
+        try:
+            stored_date = date.fromisoformat(last_state.attributes.get("date", ""))
+        except (ValueError, TypeError):
+            return
+        if stored_date != today:
+            return
+        self._current_date = stored_date
+        self._baseline = last_state.attributes.get("baseline_kwh")
+        try:
+            self._computed = float(last_state.state)
+        except (ValueError, TypeError):
+            pass
+        self._attr_last_reset = dt_util.start_of_local_day()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        total = self.coordinator.data.get("totalEnergy") if self.coordinator.data else None
+        today = dt_util.now().date()
+        if self._current_date != today:
+            self._baseline = total
+            self._current_date = today
+            self._attr_last_reset = dt_util.start_of_local_day()
+        if total is not None and self._baseline is not None:
+            self._computed = max(0.0, round(total - self._baseline, 3))
+        super()._handle_coordinator_update()
+
+
+class DailySessionTimeSensor(ChargerSensor, RestoreEntity):
+    """Daily session time — accumulated session_time per day, in hours."""
+
+    def __init__(self, coordinator, charger, prefix, entry_id):
+        super().__init__(coordinator, charger, _DAILY_SESSION_TIME_DESCRIPTION, prefix, entry_id)
+        self._accumulated: float = 0.0
+        self._prev: float | None = None
+        self._current_date: date | None = None
+        self._attr_last_reset = None
+
+    @property
+    def native_value(self):
+        return round(self._accumulated / 3600, 3)
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "date": self._current_date.isoformat() if self._current_date else None,
+            "accumulated_s": self._accumulated,
+            "prev_s": self._prev,
+        }
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        today = dt_util.now().date()
+        try:
+            stored_date = date.fromisoformat(last_state.attributes.get("date", ""))
+        except (ValueError, TypeError):
+            return
+        if stored_date != today:
+            return
+        self._current_date = stored_date
+        self._accumulated = float(last_state.attributes.get("accumulated_s", 0.0))
+        prev = last_state.attributes.get("prev_s")
+        self._prev = float(prev) if prev is not None else None
+        self._attr_last_reset = dt_util.start_of_local_day()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        current = self.coordinator.data.get("sessionTime") if self.coordinator.data else None
+        today = dt_util.now().date()
+        if self._current_date != today:
+            self._accumulated = 0.0
+            self._prev = current
+            self._current_date = today
+            self._attr_last_reset = dt_util.start_of_local_day()
+        elif current is not None and self._prev is not None:
+            delta = current - self._prev
+            if delta > 0:
+                self._accumulated += delta
+        if current is not None:
+            self._prev = current
         super()._handle_coordinator_update()
