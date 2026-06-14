@@ -39,3 +39,4 @@
 ## Backlog / исследовать
 
 - [ ] IEM1 / IEM2 назначение — выяснить что именно считают два счётчика; если IEM1=сеть, IEM2=солнце — возможен сенсор "доля солнечной энергии в сессии"
+- [ ] Device name из prefix — сейчас `DeviceInfo.name = f"Eveus {IP}"`, поэтому friendly_name сущностей в HA = "Eveus [IP] Current". Заменить на prefix (напр. "bolt_eveus" → "Bolt Eveus"), тогда имена будут "Bolt Eveus Current". Нужно обновить все файлы с DeviceInfo: sensor.py, binary_sensor.py, switch.py, number.py, select.py, button.py. Риск: смена device name пересоздаёт device-запись в HA — проверить поведение при миграции.
