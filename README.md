@@ -68,8 +68,10 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | `aivoltage` | V | AI voltage setpoint |
 | `curdesign` | A | Design max current |
 | `sessiontime` | s | Session duration (raw seconds) |
+| `session_time_daily` | h | Charging time since local midnight (resets daily, survives restart) |
 | `sessionenergy` | kWh | Energy this session |
 | `totalenergy` | kWh | Total energy (cumulative) |
+| `energy_daily` | kWh | Charging energy since local midnight (resets daily, survives restart) |
 | `systemtime` | — | Charger clock |
 | `leakvalue` | mA | Leakage current (diagnostic) |
 
@@ -109,3 +111,4 @@ Standard HA diagnostics are supported: **Settings → Integrations → Eveus →
 - `ground` and `groundctrl` use debounce (3 consecutive polls) to suppress transient glitches; firmware fault states bypass debounce and trigger immediately.
 - `groundctrl` uses value `2` for active (not `1`) — handled correctly.
 - All entity names are lowercase to match legacy YAML-based unique IDs and preserve automations.
+- The integration ships its own icon (`brand/`), shown automatically on Home Assistant 2026.3+ via the local brands proxy. On older versions the icon requires a submission to [home-assistant/brands](https://github.com/home-assistant/brands).
