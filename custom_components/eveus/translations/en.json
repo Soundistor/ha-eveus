@@ -138,7 +138,9 @@
       "v_bat": { "name": "Battery Voltage" },
       "rssi": { "name": "Wi-Fi Signal" },
       "iem1": { "name": "Energy Meter 1" },
-      "iem2": { "name": "Energy Meter 2" }
+      "iem2": { "name": "Energy Meter 2" },
+      "energy_daily": { "name": "Daily Energy" },
+      "session_time_daily": { "name": "Daily Session Time" }
     },
     "binary_sensor": {
       "ground": { "name": "Ground" },
