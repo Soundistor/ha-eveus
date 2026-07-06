@@ -1,13 +1,59 @@
-# Eveus Charger for Home Assistant
+<p align="center">
+  <img src="custom_components/eveus/brand/icon.png" alt="Eveus Charger" width="120" />
+</p>
 
-Custom integration for Eveus EV chargers (API v1 and v2).
+<h1 align="center">⚡ Eveus Charger for Home Assistant</h1>
+
+<p align="center">
+  Local-polling Home Assistant integration for Eveus EV chargers — full entity set and native statistics, for both v1 and v2 hardware generations.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Soundistor/ha-eveus/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Soundistor/ha-eveus?style=flat-square"></a>
+  <a href="https://github.com/Soundistor/ha-eveus/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/Soundistor/ha-eveus/total?style=flat-square"></a>
+  <img alt="Home Assistant" src="https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue?style=flat-square">
+  <a href="https://hacs.xyz"><img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-orange?style=flat-square"></a>
+</p>
+
+Originally based in part on [shlafik/eveuspro2ha](https://github.com/shlafik/eveuspro2ha), then rewritten around a single polling coordinator and HA-native quality requirements.
+
+> [!TIP]
+> Документація також доступна [**українською мовою 🇺🇦**](./readme.uk.md)
+
+## About
+
+[Eveus](https://eveus.ua/) (formerly the **Energy Star** trademark) is a Ukrainian manufacturer of portable EV chargers. This integration connects an Eveus charger to Home Assistant over the local network — no cloud and no account required.
+
+Once configured, it lets you:
+
+- monitor the charging **state**, current, voltage, power, energy and temperatures;
+- **start / stop** charging and set the **charging current**;
+- switch the charger's **AI / adaptive power mode**;
+- track **per-session** and **daily** energy and charging time, ready for the Energy Dashboard.
+
+The charger comes in two hardware generations — **v1** and **v2** — which expose different on-device HTTP APIs. You pick the matching model when adding the integration (see [Supported devices](#supported-devices)).
+
+## What sets this integration apart
+
+Several Home Assistant projects exist for Eveus chargers. This one focuses on:
+
+- **Both hardware generations in one integration** — the v1 and v2 chargers expose different HTTP APIs; you pick the model in the config flow and the differences (state model, polarity, scaling, extra sensors) are handled internally.
+- **First-class HA statistics** — correct `state_class` / `device_class` on energy, power, current and voltage, so long-term statistics and the Energy Dashboard work out of the box. Daily energy and charging-time sensors reset at local midnight and survive restarts.
+- **HACS-grade plumbing** — diagnostics (with IP/credentials redacted), Repairs issues for real errors only, re-auth flow, and config-entry migration.
+- **Single polling coordinator** — one source of truth for device state with dynamic polling (30 s while charging, 60 s otherwise) instead of per-entity requests.
+- **Robust safety signals** — ground sensors use debounce to suppress transient glitches, while firmware fault states bypass debounce and trigger immediately.
+- **Ukrainian-first localization** — UI strings in Ukrainian, English and Russian, with a bundled brand icon.
 
 ## Supported devices
 
-| API version | Min current | JSON fields |
-|-------------|-------------|-------------|
+| Model | Min current | JSON fields |
+|-------|-------------|-------------|
 | v1 | 7 A | 41 |
 | v2 | 6 A | 97 |
+
+<p align="center">
+  <img src="images/eveus-v1-cable.jpg" alt="Eveus v1 portable charger" width="520" />
+</p>
 
 ### v1 vs v2 differences
 
@@ -31,6 +77,12 @@ Custom integration for Eveus EV chargers (API v1 and v2).
 3. **Settings → Integrations → Add → Eveus Charger**.
 
 ### HACS
+
+The quickest way — click the button below to open the custom-repository dialog pre-filled:
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Soundistor&repository=ha-eveus&category=integration)
+
+Or add it manually:
 
 1. Open HACS → **Integrations**.
 2. Click the three-dot menu (⋮) in the top-right corner → **Custom repositories**.
@@ -97,9 +149,20 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | `button` | `force_refresh` | Force data update |
 | `button` | `sync_time` | Sync charger clock to HA time (V2 only) |
 
+## Services
+
+Besides the entities above, two services are available for automations and scripts:
+
+| Service | Description |
+|---------|-------------|
+| `eveus.set_current` | Set the charging current, in amperes. |
+| `eveus.set_ai_mode` | Set the AI / adaptive power mode. Available modes depend on the model — see the [v1 vs v2 table](#v1-vs-v2-differences). |
+
+Both take the `entity_id` of any entity belonging to the charger.
+
 ## Localizations
 
-UI strings are available in English, Russian (ru), and Ukrainian (uk).
+UI strings are available in Ukrainian (uk), English (en), and Russian (ru).
 
 ## Diagnostics
 
