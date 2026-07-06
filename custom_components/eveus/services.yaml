@@ -3,7 +3,7 @@ set_current:
   fields:
     entity_id:
       description: "Entity ID of the charger (any entity of this integration)."
-      example: "number.my_ev_charger_192_168_31_101_current_set"
+      example: "number.eveus_home_current_set"
     current:
       description: "Значение тока в амперах"
       example: 16
