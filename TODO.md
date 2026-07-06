@@ -32,6 +32,7 @@
 - [x] Safety debouncing — 14 станів безпеки з debounce (N послідовних читань перед алертом); firmware faults обходять debounce одразу
 - [ ] Локалізація UA / EN / RU — додати `translation_key` на всі сутності, `_attr_has_entity_name = True`, перенести імена сутностей і значення станів з Python-коду до `strings.json` + `translations/uk.json` + `translations/ru.json`
 - [ ] `sessionTime` — додати `state_class=MEASUREMENT`; без нього HA не пише довгострокову статистику для цього сенсора
+- [ ] `systemTime` спамить recorder — TIMESTAMP-сенсор змінюється кожен poll → ~1500–3000 рядків recorder на день. ABovsh у v4.14 через це взагалі випиляв clock-сенсор і замінив на "time drift" (на скільки секунд годинник зарядки відстає від HA; пишеться лише при реальному дрейфі >30s, ціла година дрейфу = підказка про неправильний Time Zone). Розглянути: drift-сенсор замість/поруч із systemTime, або хоча б викинути systemTime з recorder
 
 ## Low-Medium priority
 
@@ -39,16 +40,17 @@
 - [ ] Binary sensor "Has Error" — `state == "Error"`, для алертів
 - [ ] Binary sensor "Is Limited" — `subState != "No Limits"` за відсутності помилки; сигналізує що зарядка йде але обмежена
 - [ ] Binary sensor "Connectivity" — `is_on = coordinator.last_update_success`; стандартний HA спосіб показувати онлайн/офлайн статус пристрою
-- [ ] Event `eveus_session_ended` — стріляти при переході Charging/Paused → Standby/Complete з даними session_energy, session_time
+- [ ] Event `eveus_session_ended` — стріляти при переході Charging/Paused → Standby/Complete з даними session_energy, session_time. Шпаргалка — ABovsh v4.18: у payload session summary (energy/duration/reason), НЕ реплеїти переходи, що сталися поки зарядка/HA були офлайн; device triggers у UI автоматизацій — щоб тригер обирався з дропдауна без YAML
 - [ ] Event `eveus_charging_started` — симетрія до session_ended для автоматизацій
+- [ ] Last Session сенсори — прошивка стирає лічильники сесії при старті наступної, тож фінальні цифри минулої сесії зникають щойно встромив кабель. Сенсори-фіксатори (energy, duration; RestoreEntity) захоплюють значення в момент завершення сесії і тримають до наступного завершення. ABovsh додав у v4.18 — підтверджений попит
 
 ## Low priority
 
 - [ ] Session cost sensor — вартість сесії в UAH; реалізувати через Options Flow: додати поле "тариф (UAH/кВт·год)", тоді вартість = sessionEnergy × тариф, окремий сенсор не потрібен
-- [ ] Ідентифікатор пристрою за серійником/MAC замість IP — IP змінюється при зміні DHCP, HA дублює пристрій; взяти серійник з API-відповіді як `identifiers`
+- [ ] Ідентифікатор пристрою за серійником/MAC замість IP — IP змінюється при зміні DHCP, HA дублює пристрій; взяти серійник з API-відповіді як `identifiers`. ⚠️ Підводний камінь (ABovsh v4.18): старі прошивки без вбитого серійника (бачено на GRM070A-R3.01.8) повертають сміттєві байти у `serialNum` — ламається JSON-парсинг і сетап; декодувати толерантно і мати fallback, коли серійник відсутній/сміттєвий
 - [ ] Auto sync time при старті (V2) — зараз лише по кнопці; при `async_setup_entry` автоматично викликати `sync_time` щоб годинник зарядки не збивався
 - [ ] SOC system — розрахунок стану батареї EV (SOC%, час до цілі, вартість до цілі). Сумнівна фіча: дані або вводить юзер, або непрямі розрахунки. Реалізація: ABovsh/eveus (ev_sensors.py).
-- [ ] 48A model support — зараз max 32A, додати модель 48A до config flow
+- [ ] 40A/48A model support — зараз max 32A, додати моделі 40A (EVEUS Pro, hardware max 40A — ABovsh додав у v4.16) та 48A до config flow
 
 ## Backlog / дослідити
 
