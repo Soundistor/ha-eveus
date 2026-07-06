@@ -10,7 +10,7 @@ set_current:
       required: true
       selector:
         number:
-          min: 7
+          min: 6
           max: 32
           step: 1
 
@@ -20,12 +20,12 @@ set_ai_mode:
     entity_id:
       description: "Entity ID of the charger."
     mode:
-      description: "Режим: Off, Voltage, Tesla (auto), Power"
+      description: "Режим: off, voltage, tesla_auto, power (V1 поддерживает только off и voltage)"
       required: true
       selector:
         select:
           options:
-            - Off
-            - Voltage
-            - Tesla (auto)
-            - Power
+            - "off"
+            - "voltage"
+            - "tesla_auto"
+            - "power"
