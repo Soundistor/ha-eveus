@@ -1,11 +1,11 @@
 set_current:
-  description: "Установить ток зарядки"
+  description: "Set the charging current."
   fields:
     entity_id:
-      description: "Entity ID of the charger (any entity of this integration)."
+      description: "Entity ID of the charger's current number entity."
       example: "number.eveus_home_current_set"
     current:
-      description: "Значение тока в амперах"
+      description: "Charging current in amperes."
       example: 16
       required: true
       selector:
@@ -15,12 +15,12 @@ set_current:
           step: 1
 
 set_ai_mode:
-  description: "Установить режим адаптивного питания"
+  description: "Set the adaptive power (AI) mode."
   fields:
     entity_id:
-      description: "Entity ID of the charger."
+      description: "Entity ID of the charger's AI mode select entity."
     mode:
-      description: "Режим: off, voltage, tesla_auto, power (V1 поддерживает только off и voltage)"
+      description: "AI mode. V1 firmware supports only off and voltage."
       required: true
       selector:
         select:
