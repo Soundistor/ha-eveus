@@ -8,6 +8,7 @@ from datetime import timedelta
 import aiohttp
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -53,6 +54,19 @@ class ChargerCoordinator(DataUpdateCoordinator):
             # Expected when the charger is unplugged/powered off — entities go
             # unavailable; don't raise a repair issue.
             raise UpdateFailed(f"Charger unreachable: {exc}") from exc
+        except aiohttp.ClientResponseError as exc:
+            if exc.status == 401:
+                # Invalid credentials — HA starts the re-auth flow.
+                raise ConfigEntryAuthFailed(f"Invalid credentials: {exc}") from exc
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                "device_error",
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key="device_error",
+            )
+            raise UpdateFailed(f"Error updating: {exc}") from exc
         except Exception as exc:
             # Charger answered but the request failed (auth, malformed response,
             # wrong firmware model, …) — this needs the user's attention.
