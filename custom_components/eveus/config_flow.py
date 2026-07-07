@@ -59,8 +59,14 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             model = user_input[CONF_MODEL]
             username = user_input.get(CONF_USERNAME)
             password = user_input.get(CONF_PASSWORD)
+            prefix = user_input.get(CONF_DEVICE_PREFIX, "")
 
-            if not await self._test_connection(ip, model, username, password):
+            if prefix and any(
+                entry.data.get(CONF_DEVICE_PREFIX) == prefix
+                for entry in self._async_current_entries()
+            ):
+                errors[CONF_DEVICE_PREFIX] = "prefix_taken"
+            elif not await self._test_connection(ip, model, username, password):
                 errors["base"] = "cannot_connect"
             else:
                 await self.async_set_unique_id(ip)

@@ -32,7 +32,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to the charger. Check the IP address and that the charger is reachable."
+      "cannot_connect": "Cannot connect to the charger. Check the IP address and that the charger is reachable.",
+      "prefix_taken": "This device prefix is already used by another Eveus charger. Choose a unique prefix."
     },
     "abort": {
       "already_configured": "This charger is already configured.",
