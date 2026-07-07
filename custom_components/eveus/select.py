@@ -41,8 +41,11 @@ class ChargerAIModeSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        # transform_data already mapped aiStatus to a string like "Off", "Voltage"
-        return self.coordinator.data.get("aiStatus")
+        # transform_data already mapped aiStatus to a key like "off", "voltage".
+        # Guard against values outside this model's options (e.g. "tesla_auto"
+        # reported by V1 firmware, or "unknown").
+        value = self.coordinator.data.get("aiStatus")
+        return value if value in self.options else None
 
     async def async_select_option(self, option: str) -> None:
         mode = self._charger.ai_modes[option]
