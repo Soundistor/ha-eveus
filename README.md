@@ -13,6 +13,8 @@
   <a href="https://github.com/Soundistor/ha-eveus/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/Soundistor/ha-eveus/total?style=flat-square"></a>
   <img alt="Home Assistant" src="https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue?style=flat-square">
   <a href="https://hacs.xyz"><img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-orange?style=flat-square"></a>
+  <a href="https://github.com/Soundistor/ha-eveus/actions/workflows/validate.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Soundistor/ha-eveus/validate.yml?style=flat-square&label=CI"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Soundistor/ha-eveus?style=flat-square"></a>
 </p>
 
 Originally based in part on [shlafik/eveuspro2ha](https://github.com/shlafik/eveuspro2ha), then rewritten around a single polling coordinator and HA-native quality requirements.
@@ -39,7 +41,7 @@ Several Home Assistant projects exist for Eveus chargers. This one focuses on:
 
 - **Both hardware generations in one integration** — the v1 and v2 chargers expose different HTTP APIs; you pick the model in the config flow and the differences (state model, polarity, scaling, extra sensors) are handled internally.
 - **First-class HA statistics** — correct `state_class` / `device_class` on energy, power, current and voltage, so long-term statistics and the Energy Dashboard work out of the box. Daily energy and charging-time sensors reset at local midnight and survive restarts.
-- **HACS-grade plumbing** — diagnostics (with IP/credentials redacted), Repairs issues for real errors only, re-auth flow, and config-entry migration.
+- **HACS-grade plumbing** — diagnostics (IP, credentials and serial numbers redacted), Repairs issues for real errors only, re-auth and reconfigure flows, config-entry migration, and CI (hassfest + HACS validation + unit tests) on every commit.
 - **Single polling coordinator** — one source of truth for device state with dynamic polling (30 s while charging, 60 s otherwise) instead of per-entity requests.
 - **Robust safety signals** — ground sensors use debounce to suppress transient glitches, while firmware fault states bypass debounce and trigger immediately.
 - **Ukrainian-first localization** — UI strings in Ukrainian, English and Russian, with a bundled brand icon.
@@ -101,7 +103,9 @@ Or add it manually:
 | Password | Optional (leave blank if not set) |
 | Device prefix | Prefix for entity IDs, e.g. `eveus_1` or `eveus_home` |
 
-The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sensor.eveus_1_state`, `sensor.eveus_1_currentset`, etc. Set it to match your existing automations.
+The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sensor.eveus_1_state`, `sensor.eveus_1_currentset`, etc. Set it to match your existing automations. The prefix must be unique across your Eveus entries — the config flow enforces this.
+
+**Changing settings later:** open the integration entry menu (⋮) → **Reconfigure** to change the IP address, API version or credentials without re-adding the integration. The device record is keyed by the config entry, not the IP, so an IP change does not duplicate the device. The prefix cannot be changed after setup.
 
 ## Entities
 
@@ -124,7 +128,8 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | `sessionenergy` | kWh | Energy this session |
 | `totalenergy` | kWh | Total energy (cumulative) |
 | `energy_daily` | kWh | Charging energy since local midnight (resets daily, survives restart) |
-| `systemtime` | — | Charger clock |
+| `systemtime` | — | Charger clock (diagnostic; disabled by default — enable manually if needed) |
+| `time_drift` | s | Charger clock offset vs HA time, `0` = in sync (diagnostic) |
 | `leakvalue` | mA | Leakage current (diagnostic) |
 
 ### Sensors — V2 only
@@ -155,10 +160,10 @@ Besides the entities above, two services are available for automations and scrip
 
 | Service | Description |
 |---------|-------------|
-| `eveus.set_current` | Set the charging current, in amperes. |
-| `eveus.set_ai_mode` | Set the AI / adaptive power mode. Available modes depend on the model — see the [v1 vs v2 table](#v1-vs-v2-differences). |
+| `eveus.set_current` | Set the charging current, in amperes (6–32 A depending on model). |
+| `eveus.set_ai_mode` | Set the AI / adaptive power mode. Values: `off`, `voltage`, `tesla_auto`, `power` (V1 supports only `off` and `voltage`). |
 
-Both take the `entity_id` of any entity belonging to the charger.
+`set_current` targets the charger's `number` entity, `set_ai_mode` — its `select` entity.
 
 ## Localizations
 
@@ -166,7 +171,7 @@ UI strings are available in Ukrainian (uk), English (en), and Russian (ru).
 
 ## Diagnostics
 
-Standard HA diagnostics are supported: **Settings → Integrations → Eveus → Download diagnostics**. IP address, username, and password are redacted in the output.
+Standard HA diagnostics are supported: **Settings → Integrations → Eveus → Download diagnostics**. IP address, username, password and device serial numbers are redacted in the output — safe to attach to GitHub issues.
 
 ## Notes
 
@@ -174,5 +179,11 @@ Standard HA diagnostics are supported: **Settings → Integrations → Eveus →
 - When the charger is powered off or unplugged, its entities simply become **unavailable** — this is normal and does **not** raise a repair issue. A repair issue is only created when the charger is reachable but returns an error (e.g. wrong credentials, or the configured API version not matching the firmware).
 - `ground` and `groundctrl` use debounce (3 consecutive polls) to suppress transient glitches; firmware fault states bypass debounce and trigger immediately.
 - `groundctrl` uses value `2` for active (not `1`) — handled correctly.
+- The charging switch updates optimistically in the UI; the next poll confirms the actual device state.
+- If the charger's credentials change, HA shows the standard re-authentication prompt instead of a generic error.
 - All entity names are lowercase to match legacy YAML-based unique IDs and preserve automations.
 - The integration ships its own icon (`brand/`), shown automatically on Home Assistant 2026.3+ via the local brands proxy. On older versions the icon requires a submission to [home-assistant/brands](https://github.com/home-assistant/brands).
+
+## License
+
+[MIT](LICENSE)
