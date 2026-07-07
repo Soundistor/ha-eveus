@@ -24,7 +24,7 @@ class BaseCharger:
             resp.raise_for_status()
             return await resp.json()
 
-    async def get_status(self) -> Dict[str, Any]:
+    async def get_status(self) -> dict:
         raise NotImplementedError
 
     async def set_current(self, value: int) -> None:
