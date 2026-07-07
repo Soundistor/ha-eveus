@@ -58,8 +58,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "select", "select_option", {"entity_id": entity_id, "option": mode}
         )
 
-    hass.services.async_register(DOMAIN, "set_current", async_set_current)
-    hass.services.async_register(DOMAIN, "set_ai_mode", async_set_ai_mode)
+    if not hass.services.has_service(DOMAIN, "set_current"):
+        hass.services.async_register(DOMAIN, "set_current", async_set_current)
+        hass.services.async_register(DOMAIN, "set_ai_mode", async_set_ai_mode)
 
     return True
 
@@ -69,6 +70,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         data = hass.data[DOMAIN].pop(entry.entry_id)
         await data["charger"].close()
+        if not hass.data[DOMAIN]:
+            hass.services.async_remove(DOMAIN, "set_current")
+            hass.services.async_remove(DOMAIN, "set_ai_mode")
     return unload_ok
 
 
