@@ -29,15 +29,32 @@
           "username": "Leave empty if the charger has no authentication configured.",
           "password": "Leave empty if the charger has no authentication configured."
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Eveus Charger",
+        "description": "Update the connection settings. The device prefix cannot be changed.",
+        "data": {
+          "ip_address": "IP address",
+          "model": "API version",
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "ip_address": "New local IP address of the charger.",
+          "username": "Leave empty if the charger has no authentication configured.",
+          "password": "Leave empty if the charger has no authentication configured."
+        }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect to the charger. Check the IP address and that the charger is reachable.",
-      "prefix_taken": "This device prefix is already used by another Eveus charger. Choose a unique prefix."
+      "prefix_taken": "This device prefix is already used by another Eveus charger. Choose a unique prefix.",
+      "already_configured": "Another Eveus charger already uses this IP address."
     },
     "abort": {
       "already_configured": "This charger is already configured.",
-      "reauth_successful": "Re-authentication was successful."
+      "reauth_successful": "Re-authentication was successful.",
+      "reconfigure_successful": "Re-configuration was successful."
     }
   },
   "issues": {

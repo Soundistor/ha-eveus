@@ -23,6 +23,7 @@ class ChargerSwitch(CoordinatorEntity, SwitchEntity):
     def __init__(self, coordinator, charger, prefix: str, entry_id: str):
         super().__init__(coordinator)
         self._charger = charger
+        self._entry_id = entry_id
         uid = f"{prefix}_charging" if prefix else f"{entry_id}_charging"
         self._attr_unique_id = uid
         # Optimistic state shown until the next coordinator poll confirms it
@@ -57,7 +58,7 @@ class ChargerSwitch(CoordinatorEntity, SwitchEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, self._charger.ip)},
+            identifiers={(DOMAIN, self._entry_id)},
             name=f"Eveus {self._charger.ip}",
             manufacturer="Eveus",
             model=self._charger.model_name,

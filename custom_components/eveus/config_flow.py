@@ -28,18 +28,20 @@ from .charger.v2 import ChargerV2
 
 _LOGGER = logging.getLogger(__name__)
 
+_MODEL_SELECTOR = SelectSelector(
+    SelectSelectorConfig(
+        options=[
+            {"value": MODEL_V1, "label": SUPPORTED_MODELS[MODEL_V1]},
+            {"value": MODEL_V2, "label": SUPPORTED_MODELS[MODEL_V2]},
+        ],
+        mode=SelectSelectorMode.DROPDOWN,
+    )
+)
+
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_IP_ADDRESS): str,
-        vol.Required(CONF_MODEL, default=MODEL_V1): SelectSelector(
-            SelectSelectorConfig(
-                options=[
-                    {"value": MODEL_V1, "label": SUPPORTED_MODELS[MODEL_V1]},
-                    {"value": MODEL_V2, "label": SUPPORTED_MODELS[MODEL_V2]},
-                ],
-                mode=SelectSelectorMode.DROPDOWN,
-            )
-        ),
+        vol.Required(CONF_MODEL, default=MODEL_V1): _MODEL_SELECTOR,
         vol.Optional(CONF_USERNAME): str,
         vol.Optional(CONF_PASSWORD): str,
         vol.Optional(CONF_DEVICE_PREFIX, default=""): str,
@@ -79,6 +81,56 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(self, user_input=None):
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            ip = user_input[CONF_IP_ADDRESS]
+            model = user_input[CONF_MODEL]
+            username = user_input.get(CONF_USERNAME)
+            password = user_input.get(CONF_PASSWORD)
+
+            if any(
+                e.entry_id != entry.entry_id and e.data.get(CONF_IP_ADDRESS) == ip
+                for e in self._async_current_entries()
+            ):
+                errors["base"] = "already_configured"
+            elif not await self._test_connection(ip, model, username, password):
+                errors["base"] = "cannot_connect"
+            else:
+                self.hass.config_entries.async_update_entry(
+                    entry,
+                    unique_id=ip,
+                    title=f"Eveus {ip}",
+                    data={
+                        **entry.data,
+                        CONF_IP_ADDRESS: ip,
+                        CONF_MODEL: model,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: password,
+                    },
+                )
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reconfigure_successful")
+
+        # Prefix is deliberately not offered: entity unique_ids derive from it
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_IP_ADDRESS, default=entry.data[CONF_IP_ADDRESS]): str,
+                    vol.Required(CONF_MODEL, default=entry.data[CONF_MODEL]): _MODEL_SELECTOR,
+                    vol.Optional(
+                        CONF_USERNAME,
+                        description={"suggested_value": entry.data.get(CONF_USERNAME)},
+                    ): str,
+                    vol.Optional(CONF_PASSWORD): str,
+                }
+            ),
             errors=errors,
         )
 

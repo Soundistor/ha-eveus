@@ -230,7 +230,7 @@ class ChargerSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, self._charger.ip)},
+            identifiers={(DOMAIN, self._entry_id)},
             name=f"Eveus {self._charger.ip}",
             manufacturer="Eveus",
             model=self._charger.model_name,

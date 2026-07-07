@@ -43,6 +43,7 @@ class ChargerButton(CoordinatorEntity, ButtonEntity):
                  prefix: str, entry_id: str):
         super().__init__(coordinator)
         self._charger = charger
+        self._entry_id = entry_id
         self.entity_description = description
         uid = f"{prefix}_{description.name}" if prefix else f"{entry_id}_{description.name}"
         self._attr_unique_id = uid
@@ -57,7 +58,7 @@ class ChargerButton(CoordinatorEntity, ButtonEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, self._charger.ip)},
+            identifiers={(DOMAIN, self._entry_id)},
             name=f"Eveus {self._charger.ip}",
             manufacturer="Eveus",
             model=self._charger.model_name,

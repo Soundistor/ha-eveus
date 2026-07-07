@@ -31,6 +31,7 @@ class ChargerAIModeSelect(CoordinatorEntity, SelectEntity):
     def __init__(self, coordinator, charger, prefix: str, entry_id: str):
         super().__init__(coordinator)
         self._charger = charger
+        self._entry_id = entry_id
         self.entity_description = SELECT_DESCRIPTION
         uid = f"{prefix}_ai_mode" if prefix else f"{entry_id}_ai_mode"
         self._attr_unique_id = uid
@@ -55,7 +56,7 @@ class ChargerAIModeSelect(CoordinatorEntity, SelectEntity):
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
-            identifiers={(DOMAIN, self._charger.ip)},
+            identifiers={(DOMAIN, self._entry_id)},
             name=f"Eveus {self._charger.ip}",
             manufacturer="Eveus",
             model=self._charger.model_name,
