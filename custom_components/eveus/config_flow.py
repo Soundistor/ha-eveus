@@ -116,11 +116,12 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _test_connection(self, ip: str, model: str,
                                username: str | None, password: str | None) -> bool:
+        charger = ChargerV1(ip, username, password) if model == MODEL_V1 else ChargerV2(ip, username, password)
         try:
-            charger = ChargerV1(ip, username, password) if model == MODEL_V1 else ChargerV2(ip, username, password)
             await charger.get_status()
-            await charger.close()
             return True
         except Exception as exc:
             _LOGGER.debug("Cannot connect to %s (%s): %s", ip, model, exc)
             return False
+        finally:
+            await charger.close()
