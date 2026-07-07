@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 
 _TO_REDACT = {"password", "ip_address", "username"}
+_DATA_REDACT = {"serialNum", "serialNumCPU"}
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigEntry) -> dict:
@@ -15,5 +16,9 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     coordinator = data["coordinator"]
     return {
         "config": async_redact_data(dict(entry.data), _TO_REDACT),
-        "coordinator_data": coordinator.data,
+        "coordinator_data": (
+            async_redact_data(coordinator.data, _DATA_REDACT)
+            if coordinator.data
+            else coordinator.data
+        ),
     }
