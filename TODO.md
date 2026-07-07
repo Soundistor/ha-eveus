@@ -32,7 +32,7 @@
 - [x] Safety debouncing — 14 станів безпеки з debounce (N послідовних читань перед алертом); firmware faults обходять debounce одразу
 - [ ] Локалізація UA / EN / RU — додати `translation_key` на всі сутності, `_attr_has_entity_name = True`, перенести імена сутностей і значення станів з Python-коду до `strings.json` + `translations/uk.json` + `translations/ru.json`
 - [ ] `sessionTime` — додати `state_class=MEASUREMENT`; без нього HA не пише довгострокову статистику для цього сенсора
-- [ ] `systemTime` спамить recorder — TIMESTAMP-сенсор змінюється кожен poll → ~1500–3000 рядків recorder на день. ABovsh у v4.14 через це взагалі випиляв clock-сенсор і замінив на "time drift" (на скільки секунд годинник зарядки відстає від HA; пишеться лише при реальному дрейфі >30s, ціла година дрейфу = підказка про неправильний Time Zone). Розглянути: drift-сенсор замість/поруч із systemTime, або хоча б викинути systemTime з recorder
+- [x] `systemTime` спамить recorder — TIMESTAMP-сенсор змінюється кожен poll → ~1500–3000 рядків recorder на день. ABovsh у v4.14 через це взагалі випиляв clock-сенсор і замінив на "time drift" (на скільки секунд годинник зарядки відстає від HA; пишеться лише при реальному дрейфі >30s, ціла година дрейфу = підказка про неправильний Time Zone). Розглянути: drift-сенсор замість/поруч із systemTime, або хоча б викинути systemTime з recorder
 
 ## Low-Medium priority
 

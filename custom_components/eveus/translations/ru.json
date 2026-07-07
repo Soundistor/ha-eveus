@@ -103,6 +103,7 @@
       "session_energy": { "name": "Энергия сессии" },
       "total_energy": { "name": "Суммарная энергия" },
       "system_time": { "name": "Системное время" },
+      "time_drift": { "name": "Дрейф часов" },
       "leak_value": { "name": "Ток утечки" },
       "sub_state": {
         "name": "Подсостояние",

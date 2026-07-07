@@ -103,6 +103,7 @@
       "session_energy": { "name": "Session Energy" },
       "total_energy": { "name": "Total Energy" },
       "system_time": { "name": "System Time" },
+      "time_drift": { "name": "Time Drift" },
       "leak_value": { "name": "Leak Current" },
       "sub_state": {
         "name": "Sub-state",

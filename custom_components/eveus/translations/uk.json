@@ -103,6 +103,7 @@
       "session_energy": { "name": "Енергія сесії" },
       "total_energy": { "name": "Загальна енергія" },
       "system_time": { "name": "Системний час" },
+      "time_drift": { "name": "Дрейф годинника" },
       "leak_value": { "name": "Струм витоку" },
       "sub_state": {
         "name": "Підстан",

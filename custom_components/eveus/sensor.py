@@ -106,6 +106,10 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     SensorEntityDescription(
         key="systemTime", name="systemtime", translation_key="system_time",
         device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        # Advances every poll -> a recorder row per poll; disabled by default,
+        # the time_drift sensor below covers the useful signal.
+        entity_registry_enabled_default=False,
     ),
     SensorEntityDescription(
         key="leakValue", name="leakvalue", translation_key="leak_value",
@@ -172,6 +176,17 @@ _DAILY_SESSION_TIME_DESCRIPTION = SensorEntityDescription(
     icon="mdi:av-timer",
 )
 
+# No state_class: long-term statistics for clock drift are useless noise
+_TIME_DRIFT_DESCRIPTION = SensorEntityDescription(
+    key="systemTime",
+    name="time_drift",
+    translation_key="time_drift",
+    native_unit_of_measurement="s",
+    device_class=SensorDeviceClass.DURATION,
+    entity_category=EntityCategory.DIAGNOSTIC,
+    icon="mdi:clock-alert-outline",
+)
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
@@ -190,6 +205,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.append(DailyEnergySensor(coordinator, charger, prefix, entry.entry_id))
     if "sessionTime" in charger.capabilities:
         entities.append(DailySessionTimeSensor(coordinator, charger, prefix, entry.entry_id))
+    if "systemTime" in charger.capabilities:
+        entities.append(TimeDriftSensor(coordinator, charger, _TIME_DRIFT_DESCRIPTION, prefix, entry.entry_id))
     async_add_entities(entities, True)
 
 
@@ -220,6 +237,31 @@ class ChargerSensor(CoordinatorEntity, SensorEntity):
             sw_version=self.coordinator.data.get("verFWMain") if self.coordinator.data else None,
             configuration_url=f"http://{self._charger.ip}",
         )
+
+
+class TimeDriftSensor(ChargerSensor):
+    """Seconds the charger clock is off from HA's clock (0 = in sync).
+
+    Replaces watching the raw systemTime sensor, whose state changed on every
+    poll and spammed the recorder; drift only changes when the clock really
+    drifts.
+    """
+
+    @property
+    def native_value(self):
+        dev = self.coordinator.data.get("systemTime")
+        if dev is None:
+            return None
+        drift = round((dev - dt_util.utcnow()).total_seconds())
+        # V1 sends only HH:MM:SS glued to today's date — wrap around midnight
+        if drift > 43200:
+            drift -= 86400
+        elif drift < -43200:
+            drift += 86400
+        # Anti-flicker: in-sync clocks read exactly 0, real drift in 10s steps
+        if abs(drift) < 30:
+            return 0
+        return int(round(drift / 10.0)) * 10
 
 
 class SessionEnergySensor(ChargerSensor):
