@@ -5,7 +5,7 @@ from homeassistant.components.number import NumberEntity, NumberEntityDescriptio
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, friendly_device_name
 
 NUMBER_DESCRIPTION = NumberEntityDescription(
     key="currentSet",
@@ -35,6 +35,7 @@ class ChargerCurrentNumber(CoordinatorEntity, NumberEntity):
         super().__init__(coordinator)
         self._charger = charger
         self._entry_id = entry_id
+        self._device_name = friendly_device_name(prefix, charger.ip)
         self.entity_description = NUMBER_DESCRIPTION
         uid = f"{prefix}_current_set" if prefix else f"{entry_id}_current_set"
         self._attr_unique_id = uid
@@ -55,7 +56,7 @@ class ChargerCurrentNumber(CoordinatorEntity, NumberEntity):
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
-            name=f"Eveus {self._charger.ip}",
+            name=self._device_name,
             manufacturer="Eveus",
             model=self._charger.model_name,
             configuration_url=f"http://{self._charger.ip}",

@@ -5,7 +5,7 @@ from homeassistant.components.select import SelectEntity, SelectEntityDescriptio
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, friendly_device_name
 
 SELECT_DESCRIPTION = SelectEntityDescription(
     key="aiStatus",
@@ -32,6 +32,7 @@ class ChargerAIModeSelect(CoordinatorEntity, SelectEntity):
         super().__init__(coordinator)
         self._charger = charger
         self._entry_id = entry_id
+        self._device_name = friendly_device_name(prefix, charger.ip)
         self.entity_description = SELECT_DESCRIPTION
         uid = f"{prefix}_ai_mode" if prefix else f"{entry_id}_ai_mode"
         self._attr_unique_id = uid
@@ -57,7 +58,7 @@ class ChargerAIModeSelect(CoordinatorEntity, SelectEntity):
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
-            name=f"Eveus {self._charger.ip}",
+            name=self._device_name,
             manufacturer="Eveus",
             model=self._charger.model_name,
             configuration_url=f"http://{self._charger.ip}",

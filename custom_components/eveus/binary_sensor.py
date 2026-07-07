@@ -10,7 +10,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, friendly_device_name
 from .coordinator import FIRMWARE_FAULT_STATES
 
 # ground=1 → защита активна; groundCtrl=2 → активна (не просто truthy!)
@@ -47,6 +47,7 @@ class ChargerBinarySensor(CoordinatorEntity, BinarySensorEntity):
         super().__init__(coordinator)
         self._charger = charger
         self._entry_id = entry_id
+        self._device_name = friendly_device_name(prefix, charger.ip)
         self.entity_description = description
         uid = f"{prefix}_{description.name}" if prefix else f"{entry_id}_{description.name}"
         self._attr_unique_id = uid
@@ -79,7 +80,7 @@ class ChargerBinarySensor(CoordinatorEntity, BinarySensorEntity):
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
-            name=f"Eveus {self._charger.ip}",
+            name=self._device_name,
             manufacturer="Eveus",
             model=self._charger.model_name,
             configuration_url=f"http://{self._charger.ip}",

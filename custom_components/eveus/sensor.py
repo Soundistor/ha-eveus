@@ -16,7 +16,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import DOMAIN, friendly_device_name
 
 _V1_STATE_OPTIONS = [
     "no_data", "ready", "waiting", "charging", "current_leak", "cpu_error",
@@ -219,6 +219,7 @@ class ChargerSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._charger = charger
         self._entry_id = entry_id
+        self._device_name = friendly_device_name(prefix, charger.ip)
         self.entity_description = description
         uid = f"{prefix}_{description.name}" if prefix else f"{entry_id}_{description.name}"
         self._attr_unique_id = uid
@@ -231,7 +232,7 @@ class ChargerSensor(CoordinatorEntity, SensorEntity):
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
-            name=f"Eveus {self._charger.ip}",
+            name=self._device_name,
             manufacturer="Eveus",
             model=self._charger.model_name,
             sw_version=self.coordinator.data.get("verFWMain") if self.coordinator.data else None,

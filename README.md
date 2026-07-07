@@ -103,7 +103,7 @@ Or add it manually:
 | Password | Optional (leave blank if not set) |
 | Device prefix | Prefix for entity IDs, e.g. `eveus_1` or `eveus_home` |
 
-The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sensor.eveus_1_state`, `sensor.eveus_1_currentset`, etc. Set it to match your existing automations. The prefix must be unique across your Eveus entries — the config flow enforces this.
+The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sensor.eveus_1_state`, `sensor.eveus_1_currentset`, etc. Set it to match your existing automations. The prefix must be unique across your Eveus entries — the config flow enforces this. The prefix also defines the device name shown in HA: `eveus_home` → **Eveus Home** (with an empty prefix the device is named `Eveus <ip>`).
 
 **Changing settings later:** open the integration entry menu (⋮) → **Reconfigure** to change the IP address, API version or credentials without re-adding the integration. The device record is keyed by the config entry, not the IP, so an IP change does not duplicate the device. The prefix cannot be changed after setup.
 

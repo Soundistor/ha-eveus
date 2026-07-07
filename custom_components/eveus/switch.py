@@ -6,7 +6,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, friendly_device_name
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -24,6 +24,7 @@ class ChargerSwitch(CoordinatorEntity, SwitchEntity):
         super().__init__(coordinator)
         self._charger = charger
         self._entry_id = entry_id
+        self._device_name = friendly_device_name(prefix, charger.ip)
         uid = f"{prefix}_charging" if prefix else f"{entry_id}_charging"
         self._attr_unique_id = uid
         # Optimistic state shown until the next coordinator poll confirms it
@@ -59,7 +60,7 @@ class ChargerSwitch(CoordinatorEntity, SwitchEntity):
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
-            name=f"Eveus {self._charger.ip}",
+            name=self._device_name,
             manufacturer="Eveus",
             model=self._charger.model_name,
             configuration_url=f"http://{self._charger.ip}",
