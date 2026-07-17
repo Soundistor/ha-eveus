@@ -6,7 +6,7 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 
-from .const import DOMAIN, MODEL_V1, CONF_DEVICE_PREFIX
+from .const import DOMAIN, MODEL_V1, CONF_DEVICE_PREFIX, friendly_device_name
 from .coordinator import ChargerCoordinator
 from .charger.v1 import ChargerV1
 from .charger.v2 import ChargerV2
@@ -31,8 +31,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     prefix = entry.data.get(CONF_DEVICE_PREFIX, "")
 
     charger = ChargerV1(ip, username, password) if model == MODEL_V1 else ChargerV2(ip, username, password)
+    device_name = friendly_device_name(prefix, ip)
 
-    coordinator = ChargerCoordinator(hass, charger)
+    coordinator = ChargerCoordinator(hass, charger, entry.entry_id, device_name)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})

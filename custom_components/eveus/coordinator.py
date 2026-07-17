@@ -11,8 +11,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    EVENT_CHARGING_STARTED,
+    EVENT_SESSION_ENDED,
+    SESSION_ACTIVE_STATES,
+    session_transition,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +38,14 @@ FIRMWARE_FAULT_STATES = frozenset({
 
 class ChargerCoordinator(DataUpdateCoordinator):
 
-    def __init__(self, hass: HomeAssistant, charger, update_interval: int = 30) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        charger,
+        entry_id,
+        device_name,
+        update_interval: int = 30,
+    ) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -39,6 +53,12 @@ class ChargerCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=update_interval),
         )
         self.charger = charger
+        self._entry_id = entry_id
+        self._device_name = device_name
+        self._prev_state = None
+        self._live_energy = None
+        self._live_time = None
+        self.last_session = None
 
     async def _async_update_data(self):
         try:
@@ -49,6 +69,7 @@ class ChargerCoordinator(DataUpdateCoordinator):
             self.update_interval = timedelta(
                 seconds=30 if data.get("state") == "Charging" else 60
             )
+            self._process_session_events(data)
             return data
         except UNREACHABLE_ERRORS as exc:
             # Expected when the charger is unplugged/powered off — entities go
@@ -79,3 +100,35 @@ class ChargerCoordinator(DataUpdateCoordinator):
                 translation_key="device_error",
             )
             raise UpdateFailed(f"Error updating: {exc}") from exc
+
+    def _process_session_events(self, data) -> None:
+        new_state = data.get("state")
+
+        if new_state in SESSION_ACTIVE_STATES:
+            # The firmware wipes sessionEnergy/sessionTime the moment the next
+            # session starts, so capture the last values seen while active —
+            # they are the only reliable final figures for the ended session.
+            se = data.get("sessionEnergy")
+            st = data.get("sessionTime")
+            if se is not None:
+                self._live_energy = se
+            if st is not None:
+                self._live_time = st
+
+        if self._prev_state is not None:
+            event = session_transition(self._prev_state, new_state)
+            base = {"entry_id": self._entry_id, "device_name": self._device_name}
+            if event == "charging_started":
+                self.hass.bus.async_fire(EVENT_CHARGING_STARTED, base)
+            elif event == "session_ended":
+                self.last_session = {
+                    "energy_kwh": self._live_energy,
+                    "duration_s": self._live_time,
+                    "ended_state": new_state,
+                    "ended_at": dt_util.utcnow().isoformat(),
+                }
+                self.hass.bus.async_fire(EVENT_SESSION_ENDED, {**base, **self.last_session})
+                self._live_energy = None
+                self._live_time = None
+
+        self._prev_state = new_state
