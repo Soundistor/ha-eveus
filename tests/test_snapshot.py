@@ -1,14 +1,13 @@
 """Snapshot tests: full entity set + states for V1 and V2 (frozen clock).
 
-Sets up the integration with the real mockData /main bodies as the charger
+Sets up the integration with the sanitized /main fixtures as the charger
 response and snapshots (a) the entity-registry summary — including
 disabled-by-default entities — and (b) all entity states. Time is frozen so the
 clock-derived sensors (TimeDriftSensor, daily sensors, systemTime) are
 deterministic. Any unintended change to the entity contract breaks the test.
 
-The Postman collections are discovered by globbing mockData/ and classified by
-payload content (V2 carries subState/verFWMain, V1 does not) — no snapshot
-filenames are hard-coded.
+The /main bodies live in tests/fixtures/{v1,v2}_main.json — committed and
+device-identifiers scrubbed — so these snapshots run in CI too.
 
 Regenerate after an intentional contract change:
     python -m pytest tests/test_snapshot.py --snapshot-update
@@ -26,7 +25,7 @@ from syrupy.assertion import SnapshotAssertion
 
 from custom_components.eveus.const import DOMAIN
 
-_MOCKDATA = Path(__file__).resolve().parents[1] / "mockData"
+_FIXTURES = Path(__file__).resolve().parent / "fixtures"
 _FROZEN = "2026-07-01T12:00:00+00:00"
 
 
@@ -35,37 +34,9 @@ def snapshot(snapshot: SnapshotAssertion) -> SnapshotAssertion:
     return snapshot.use_extension(HomeAssistantSnapshotExtension)
 
 
-def _extract_main(path: Path) -> dict | None:
-    collection = json.loads(path.read_text(encoding="utf-8"))
-
-    def walk(items):
-        for item in items:
-            if "item" in item:
-                found = walk(item["item"])
-                if found is not None:
-                    return found
-                continue
-            url = item.get("request", {}).get("url")
-            raw = url.get("raw") if isinstance(url, dict) else url
-            if raw and raw.rstrip("/").endswith("/main"):
-                responses = item.get("response") or []
-                if responses and responses[0].get("body"):
-                    return json.loads(responses[0]["body"])
-        return None
-
-    return walk(collection.get("item", []))
-
-
 def _main_body_for(family: str) -> dict:
-    """Discover the /main body for a firmware family from mockData."""
-    for path in sorted(_MOCKDATA.glob("*.postman_collection.json")):
-        body = _extract_main(path)
-        if body is None:
-            continue
-        detected = "v2" if ("subState" in body or "verFWMain" in body) else "v1"
-        if detected == family:
-            return body
-    pytest.skip(f"no {family} /main snapshot in mockData")
+    """Load the /main body for a firmware family from the committed fixtures."""
+    return json.loads((_FIXTURES / f"{family}_main.json").read_text(encoding="utf-8"))
 
 
 async def _setup(hass, monkeypatch, model, raw, entry_id):

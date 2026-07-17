@@ -41,6 +41,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.test.txt
-      # Snapshot/golden tests skip without the private mockData/ fixtures, which
-      # leaves their committed snapshots "unused" in CI — warn instead of fail.
-      - run: python -m pytest -q --cov=custom_components --snapshot-warn-unused
+      - run: python -m pytest -q --cov=custom_components
