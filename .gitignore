@@ -20,6 +20,7 @@ __pycache__/
 *.pyo
 .pytest_cache/
 .coverage
+.venv/
 
 # Editor
 .vscode/settings.json
