@@ -9,16 +9,15 @@ STALE_STATE_AFTER, so a back-dated `_last_success` reproduces a long offline.
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import timedelta
 from unittest.mock import Mock
 
 import aiohttp
-import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
+import pytest
 from pytest_homeassistant_custom_component.common import async_capture_events
 
 from custom_components.eveus.const import (
@@ -26,7 +25,7 @@ from custom_components.eveus.const import (
     EVENT_CHARGING_STARTED,
     EVENT_SESSION_ENDED,
 )
-from custom_components.eveus.coordinator import ChargerCoordinator, STALE_STATE_AFTER
+from custom_components.eveus.coordinator import STALE_STATE_AFTER, ChargerCoordinator
 
 _ENTRY_ID = "e1"
 _ISSUE_ID = f"device_error_{_ENTRY_ID}"
@@ -172,7 +171,7 @@ async def test_auth_error_raises_and_no_issue(hass):
 async def test_unreachable_raises_updatefailed_no_issue(hass):
     coord = _make_coordinator(hass)
 
-    for exc in (aiohttp.ClientConnectionError("down"), asyncio.TimeoutError()):
+    for exc in (aiohttp.ClientConnectionError("down"), TimeoutError()):
         coord.charger.set_exc(exc)
         with pytest.raises(UpdateFailed):
             await coord._async_update_data()

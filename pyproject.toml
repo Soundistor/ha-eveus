@@ -1,0 +1,33 @@
+[tool.ruff]
+# HA 2025.1 (this integration's pinned target) requires Python 3.12, CI runs 3.12,
+# and the code uses 3.12 syntax (PEP 695 `type` alias in coordinator.py).
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+# Pragmatic, Home-Assistant-core-like ruleset.
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+    # Line length is a formatter concern; this repo is not auto-formatted here
+    # (`ruff format` intentionally not run), so enforcing E501 would demand large
+    # manual line-wrapping churn. Other E-rules stay active.
+    "E501",
+    # Cyrillic (Russian) text is used intentionally in docstrings/comments; the
+    # "ambiguous unicode" rules are false positives for this codebase.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # Stylistic collection-literal concatenation (`list(...) + ["x"]`); unsafe
+    # autofix and the existing module-level option lists read clearly as-is.
+    "RUF005",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test stub classes use `capabilities: set = set()` (RUF012) and intentionally
+# unpack unused locals like `sensor, coord = _make(...)` (RUF059). Tests are not
+# edited to satisfy the linter, so these rules are relaxed for the test suite.
+"tests/**" = ["RUF012", "RUF059"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+combine-as-imports = true

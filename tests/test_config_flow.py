@@ -6,10 +6,7 @@ the flow branching AND _test_connection's 401-vs-other mapping.
 """
 from __future__ import annotations
 
-import asyncio
-
 import aiohttp
-import pytest
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry

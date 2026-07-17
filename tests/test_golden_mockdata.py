@@ -11,14 +11,13 @@ staying robust to float representation (same json.loads doubles on both sides).
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
-from datetime import datetime, timezone
 from pathlib import Path
-
-import pytest
 
 from charger.v1 import ChargerV1
 from charger.v2 import ChargerV2
+import pytest
 
 _MOCKDATA = Path(__file__).resolve().parents[1] / "mockData"
 
@@ -87,7 +86,7 @@ def test_golden_v2_vw():
     expected["state"] = "charging"
     expected["subState"] = "no_limits"
     expected["aiStatus"] = "power"
-    expected["systemTime"] = datetime(2024, 12, 12, 16, 59, 21, tzinfo=timezone.utc)
+    expected["systemTime"] = datetime(2024, 12, 12, 16, 59, 21, tzinfo=UTC)
 
     assert out == expected
 

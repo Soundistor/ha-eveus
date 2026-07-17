@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .base import AI_MODE_MAP, BaseCharger
 
@@ -33,7 +33,7 @@ class ChargerV2(BaseCharger):
         await self._post_page_event(f"evseEnabled={0 if enabled else 1}")
 
     async def sync_time(self) -> None:
-        ts = int(datetime.now(tz=timezone.utc).timestamp())
+        ts = int(datetime.now(tz=UTC).timestamp())
         await self._post_page_event(f"systemTime={ts}")
 
     def is_charging_active(self, enabled_value) -> bool:
@@ -82,7 +82,7 @@ class ChargerV2(BaseCharger):
         sys_time = raw.get("systemTime")
         if sys_time:
             try:
-                raw["systemTime"] = datetime.fromtimestamp(int(sys_time), tz=timezone.utc)
+                raw["systemTime"] = datetime.fromtimestamp(int(sys_time), tz=UTC)
             except (ValueError, OSError):
                 raw["systemTime"] = None
         return raw

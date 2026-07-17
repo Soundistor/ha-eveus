@@ -9,7 +9,7 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .coordinator import EveusConfigEntry, FIRMWARE_FAULT_STATES
+from .coordinator import FIRMWARE_FAULT_STATES, EveusConfigEntry
 from .entity import EveusEntity
 
 PARALLEL_UPDATES = 0

@@ -6,14 +6,14 @@ directly — no HA state plumbing needed.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 import custom_components.eveus.sensor as sensor_mod
-from custom_components.eveus.sensor import TimeDriftSensor, _TIME_DRIFT_DESCRIPTION
+from custom_components.eveus.sensor import _TIME_DRIFT_DESCRIPTION, TimeDriftSensor
 
-_NOW = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 7, 1, 12, 0, 0, tzinfo=UTC)
 
 
 class _Coord:

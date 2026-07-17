@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, MODEL_V1, CONF_DEVICE_PREFIX, friendly_device_name
-from .coordinator import ChargerCoordinator, EveusConfigEntry, EveusData
 from .charger.v1 import ChargerV1
 from .charger.v2 import ChargerV2
+from .const import CONF_DEVICE_PREFIX, DOMAIN, MODEL_V1, friendly_device_name
+from .coordinator import ChargerCoordinator, EveusConfigEntry, EveusData
 
 _LOGGER = logging.getLogger(__name__)
 

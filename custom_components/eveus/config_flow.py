@@ -1,31 +1,32 @@
 """Config Flow – GUI-добавление новых зарядок."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
-from typing import Any, Mapping
+from typing import Any
 
 import aiohttp
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
 )
+import voluptuous as vol
 
-from .const import (
-    DOMAIN,
-    CONF_IP_ADDRESS,
-    CONF_MODEL,
-    CONF_USERNAME,
-    CONF_PASSWORD,
-    CONF_DEVICE_PREFIX,
-    SUPPORTED_MODELS,
-    MODEL_V1,
-    MODEL_V2,
-)
 from .charger.v1 import ChargerV1
 from .charger.v2 import ChargerV2
+from .const import (
+    CONF_DEVICE_PREFIX,
+    CONF_IP_ADDRESS,
+    CONF_MODEL,
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    DOMAIN,
+    MODEL_V1,
+    MODEL_V2,
+    SUPPORTED_MODELS,
+)
 
 _LOGGER = logging.getLogger(__name__)
 

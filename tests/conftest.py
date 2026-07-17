@@ -1,9 +1,8 @@
 """Fixtures for testing."""
 
 import importlib.util
-import socket
-import sys
 from pathlib import Path
+import sys
 
 import pytest
 

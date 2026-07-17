@@ -1,6 +1,6 @@
 """Unit tests for ChargerV2.transform_data."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from charger.v2 import ChargerV2
 
@@ -43,8 +43,8 @@ def test_ai_status_mapping():
 
 def test_system_time_valid():
     out = _charger().transform_data({"systemTime": 1751884800})
-    assert out["systemTime"] == datetime.fromtimestamp(1751884800, tz=timezone.utc)
-    assert out["systemTime"].tzinfo is timezone.utc
+    assert out["systemTime"] == datetime.fromtimestamp(1751884800, tz=UTC)
+    assert out["systemTime"].tzinfo is UTC
 
 
 def test_system_time_invalid():

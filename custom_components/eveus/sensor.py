@@ -15,15 +15,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .coordinator import EveusConfigEntry
-from .entity import EveusEntity
 from .charger.v1 import V1_STATE_MAP
 from .charger.v2 import (
+    AI_MODE_MAP,
     V2_STATE_MAP,
     V2_SUBSTATE_ERROR_MAP,
     V2_SUBSTATE_LIMIT_MAP,
-    AI_MODE_MAP,
 )
+from .coordinator import EveusConfigEntry
+from .entity import EveusEntity
 
 PARALLEL_UPDATES = 0
 
@@ -266,7 +266,7 @@ class TimeDriftSensor(ChargerSensor):
         # Anti-flicker: in-sync clocks read exactly 0, real drift in 10s steps
         if abs(drift) < 30:
             return 0
-        return int(round(drift / 10.0)) * 10
+        return int(round(drift / 10.0)) * 10  # noqa: RUF046  explicit int() documents intent
 
 
 class SessionEnergySensor(ChargerSensor, RestoreEntity):
@@ -329,7 +329,7 @@ class DailyEnergySensor(ChargerSensor, RestoreEntity):
             return
         self._current_date = stored_date
         self._baseline = last_state.attributes.get("baseline_kwh")
-        try:
+        try:  # noqa: SIM105  explicit try/except reads clearer than contextlib.suppress
             self._computed = float(last_state.state)
         except (ValueError, TypeError):
             pass
@@ -422,7 +422,7 @@ class LastSessionSensor(ChargerSensor, RestoreEntity):
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
         if last_state and last_state.state not in (None, "unknown", "unavailable"):
-            try:
+            try:  # noqa: SIM105  explicit try/except reads clearer than contextlib.suppress
                 self._value = float(last_state.state)
             except (ValueError, TypeError):
                 pass

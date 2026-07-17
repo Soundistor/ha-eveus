@@ -11,9 +11,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
-import pytest
 from homeassistant.core import State
 from homeassistant.util import dt as dt_util
+import pytest
 
 import custom_components.eveus.sensor as sensor_mod
 from custom_components.eveus.sensor import DailyEnergySensor, DailySessionTimeSensor

@@ -14,12 +14,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from homeassistant.helpers import entity_registry as er
-from syrupy.assertion import SnapshotAssertion
-
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.syrupy import HomeAssistantSnapshotExtension
+from syrupy.assertion import SnapshotAssertion
 
 from custom_components.eveus.const import DOMAIN
 
