@@ -67,7 +67,7 @@ class ChargerCoordinator(DataUpdateCoordinator):
             ir.async_delete_issue(self.hass, DOMAIN, "device_error")
             # Dynamic polling: 30s while charging, 60s otherwise
             self.update_interval = timedelta(
-                seconds=30 if data.get("state") == "Charging" else 60
+                seconds=30 if data.get("state") == "charging" else 60
             )
             self._process_session_events(data)
             return data
