@@ -26,7 +26,7 @@
 
 ## Тести (рекомендації рев'ю 2026-07-17)
 
-- [ ] **`pytest-homeassistant-custom-component`** — інфраструктурний крок, розблоковує все нижче: фікстура `hass`, `aioclient_mock`, тестування config flow/координатора/сутностей без реального HA. Заодно прибрати standalone-костиль завантаження пакета charger у `tests/conftest.py`.
+- [x] **`pytest-homeassistant-custom-component`** — інфраструктурний крок, розблоковує все нижче: фікстура `hass`, `aioclient_mock`, тестування config flow/координатора/сутностей без реального HA. Заодно прибрати standalone-костиль завантаження пакета charger у `tests/conftest.py`. *(Прим. рев'ю: шим свідомо залишено — golden/transform-тести працюють без імпорту homeassistant; співіснує з phacc.)*
 - [x] **Тести координатора** — найцінніше, тут жили баги: (а) `_process_session_events` stateful-частина — захват live-значень, скидання `_prev_state` при офлайні, події на переходах; (б) шляхи помилок — 401 → `ConfigEntryAuthFailed`, unreachable → `UpdateFailed` без repair issue, інша помилка → issue з id `device_error_{entry_id}`; (в) динамічний інтервал 30/60s.
 - [x] **Тести binary sensor** — табличні «послідовність значень → очікуваний is_on»: debounce (N підряд), bypass при firmware fault, семантика `ground`/`groundCtrl` (писати разом із фіксом інверсії — застрахує від регресу).
 - [x] **Тести daily-сенсорів** — найкапризніша логіка проєкту: полуночний rollover, restore після рестарту (той самий день / наступний), скидання `sessionTime` при новій сесії (негативна дельта), сесія через північ.
@@ -42,10 +42,11 @@
 
 ## Best practices HA (рекомендації рев'ю 2026-07-17)
 
-- [ ] **`entry.runtime_data` замість `hass.data[DOMAIN][entry_id]`** — сучасний паттерн: типізований `ConfigEntry[EveusData]` (dataclass із charger/coordinator/prefix), прибирає словники-по-ключах.
-- [ ] **`PARALLEL_UPDATES = 0`** у кожному модулі платформи — вимога quality scale для coordinator-інтеграцій.
-- [ ] **Типізація** — аннотації `async_setup_entry` у платформах (`HomeAssistant`, `ConfigEntry`, `AddEntitiesCallback`), параметризувати `DataUpdateCoordinator[dict[str, Any]]`.
-- [ ] **ruff у CI** — зараз лише hassfest/HACS/pytest, лінта немає. Конфіг за зразком HA-core; опц. pre-commit.
+- [x] **`entry.runtime_data` замість `hass.data[DOMAIN][entry_id]`** — сучасний паттерн: типізований `ConfigEntry[EveusData]` (dataclass із charger/coordinator/prefix), прибирає словники-по-ключах.
+- [x] **`PARALLEL_UPDATES = 0`** у кожному модулі платформи — вимога quality scale для coordinator-інтеграцій.
+- [x] **Типізація** — аннотації `async_setup_entry` у платформах (`HomeAssistant`, `ConfigEntry`, `AddEntitiesCallback`), параметризувати `DataUpdateCoordinator[dict[str, Any]]`.
+- [x] **ruff у CI** — зараз лише hassfest/HACS/pytest, лінта немає. Конфіг за зразком HA-core; опц. pre-commit.
+- [x] **Почистити `setup.cfg` від шаблонного спадку** — секції `[flake8]`, `[isort]`, `[mypy]` (python_version 3.7!) приїхали з шаблону phacc і не використовуються: лінтить ruff (pyproject.toml), mypy не запускається. Лишити тільки `[coverage:*]` і `[tool:pytest]`, щоб конфіги не суперечили один одному.
 - [ ] **Quality scale checklist як roadmap** — формальна шкала HA (bronze/silver/gold/platinum, `quality_scale.yaml`): пройтись чеклістом, зафіксувати поточний рівень (~silver) і брати наступні пункти звідти замість гадань.
 - [ ] **DHCP discovery** — matchers у manifest за MAC OUI зарядки: HA сам запропонує додати пристрій і переживе зміну IP. OUI зняти під час live capture.
 
