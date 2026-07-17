@@ -28,6 +28,14 @@ _LOGGER = logging.getLogger(__name__)
 # as a repair issue the user has to act on.
 UNREACHABLE_ERRORS = (aiohttp.ClientConnectionError, asyncio.TimeoutError)
 
+# If more than this elapses between two successful polls, the charger/HA was
+# offline long enough that a state remembered from before the gap is no longer a
+# valid baseline — replaying its transition would fire a stale session_ended
+# with pre-offline figures. Reset the baseline instead. A short blip (one or two
+# missed polls, well under this) is preserved, so a session that ends across a
+# brief network hiccup is still reported.
+STALE_STATE_AFTER = timedelta(minutes=15)
+
 # Firmware-level faults that bypass safety debounce in binary sensors
 FIRMWARE_FAULT_STATES = frozenset({
     "cpu_error", "relay_stuck",          # V1 main state
@@ -56,6 +64,7 @@ class ChargerCoordinator(DataUpdateCoordinator):
         self._entry_id = entry_id
         self._device_name = device_name
         self._prev_state = None
+        self._last_success = None
         self._live_energy = None
         self._live_time = None
         self.last_session = None
@@ -69,15 +78,25 @@ class ChargerCoordinator(DataUpdateCoordinator):
             self.update_interval = timedelta(
                 seconds=30 if data.get("state") == "charging" else 60
             )
+            now = dt_util.utcnow()
+            if (
+                self._last_success is not None
+                and now - self._last_success > STALE_STATE_AFTER
+            ):
+                # Long gap since the last good poll: the charger was offline
+                # long enough that the remembered state is stale. Drop the
+                # baseline so this poll starts fresh and we don't replay a
+                # transition that happened while offline.
+                self._prev_state = None
+            self._last_success = now
             self._process_session_events(data)
             return data
         except UNREACHABLE_ERRORS as exc:
             # Expected when the charger is unplugged/powered off — entities go
-            # unavailable; don't raise a repair issue.
-            self._prev_state = None
+            # unavailable; don't raise a repair issue. A brief blip keeps the
+            # baseline (see STALE_STATE_AFTER); only a long gap resets it.
             raise UpdateFailed(f"Charger unreachable: {exc}") from exc
         except aiohttp.ClientResponseError as exc:
-            self._prev_state = None
             if exc.status == 401:
                 # Invalid credentials — HA starts the re-auth flow.
                 raise ConfigEntryAuthFailed(f"Invalid credentials: {exc}") from exc
@@ -94,7 +113,6 @@ class ChargerCoordinator(DataUpdateCoordinator):
         except Exception as exc:
             # Charger answered but the request failed (auth, malformed response,
             # wrong firmware model, …) — this needs the user's attention.
-            self._prev_state = None
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
