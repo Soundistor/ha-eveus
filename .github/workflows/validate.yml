@@ -41,4 +41,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.test.txt
-      - run: python -m pytest -q
+      - run: python -m pytest -q --cov=custom_components
