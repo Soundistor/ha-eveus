@@ -30,7 +30,7 @@
 - [x] **Тести координатора** — найцінніше, тут жили баги: (а) `_process_session_events` stateful-частина — захват live-значень, скидання `_prev_state` при офлайні, події на переходах; (б) шляхи помилок — 401 → `ConfigEntryAuthFailed`, unreachable → `UpdateFailed` без repair issue, інша помилка → issue з id `device_error_{entry_id}`; (в) динамічний інтервал 30/60s.
 - [ ] **Тести binary sensor** — табличні «послідовність значень → очікуваний is_on»: debounce (N підряд), bypass при firmware fault, семантика `ground`/`groundCtrl` (писати разом із фіксом інверсії — застрахує від регресу).
 - [x] **Тести daily-сенсорів** — найкапризніша логіка проєкту: полуночний rollover, restore після рестарту (той самий день / наступний), скидання `sessionTime` при новій сесії (негативна дельта), сесія через північ.
-- [ ] **Тести config flow** — happy path, `cannot_connect`, `invalid_auth`, `prefix_taken`, дублікат IP (abort), reconfigure, reauth. Стандартний мінімум якісної інтеграції.
+- [x] **Тести config flow** — happy path, `cannot_connect`, `invalid_auth`, `prefix_taken`, дублікат IP (abort), reconfigure, reauth. Стандартний мінімум якісної інтеграції.
 - [x] **Contract/golden-тести на mockData** — прогнати реальні Postman-снапшоти (`mockData/`, Bolt V1 і VW V2) через `transform_data` цілком і порівняти повний результат. Пінить контракт живого пристрою, страхує майбутні рефакторинги charger-пакета.
 - [ ] **Тести `TimeDriftSensor`** — wrap через північ (±43200), антифлікер (<30s → 0, округлення до 10s). Майже чиста функція, дешево.
 - [ ] (опц.) **Snapshot-тести (syrupy)** — стандарт HA-core: слепок усіх сутностей/станів; будь-яка ненавмисна зміна контракту сутностей ламає тест.
