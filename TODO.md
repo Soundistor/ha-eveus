@@ -20,6 +20,35 @@
 - [x] **`SessionEnergySensor._attr_last_reset` не переживає рестарт** — після перезапуску HA `last_reset=None` до наступного скидання сесії; статистика TOTAL за перехідний період може порахуватись криво. Дрібниця: відновлювати через RestoreEntity (як у daily-сенсорів).
 - [ ] (відкладено — до появи `ramp_current`/`drop_current`) **Сервіси `eveus.set_current`/`eveus.set_ai_mode` — кандидати на депрекацію** — тонкі проксі до `number.set_value`/`select.select_option` без жодної доданої логіки; не валідують, що entity_id належить інтеграції. З появою `ramp_current`/`drop_current` (бэклог) вартує лишити тільки сервіси з реальною логікою.
 
+## Follow-up (повторне рев'ю 2026-07-17)
+
+- [ ] **`session_ended` глушиться одним пропущеним poll'ом** — фікс офлайн-реплею скидає `_prev_state = None` на БУДЬ-ЯКІЙ невдачі оновлення. Один Wi-Fi-таймаут у момент завершення сесії (а завершення зарядки нерідко збігається з мережевими подіями) → подія `eveus_session_ended` і Last Session сенсори за цю сесію втрачаються назавжди. Пом'якшити: скидати `_prev_state` лише після N невдач поспіль або коли розрив триваліший за поріг (напр. >5 хв від останнього успішного poll'а) — короткий blip переживати без скидання.
+
+## Тести (рекомендації рев'ю 2026-07-17)
+
+- [ ] **`pytest-homeassistant-custom-component`** — інфраструктурний крок, розблоковує все нижче: фікстура `hass`, `aioclient_mock`, тестування config flow/координатора/сутностей без реального HA. Заодно прибрати standalone-костиль завантаження пакета charger у `tests/conftest.py`.
+- [ ] **Тести координатора** — найцінніше, тут жили баги: (а) `_process_session_events` stateful-частина — захват live-значень, скидання `_prev_state` при офлайні, події на переходах; (б) шляхи помилок — 401 → `ConfigEntryAuthFailed`, unreachable → `UpdateFailed` без repair issue, інша помилка → issue з id `device_error_{entry_id}`; (в) динамічний інтервал 30/60s.
+- [ ] **Тести binary sensor** — табличні «послідовність значень → очікуваний is_on»: debounce (N підряд), bypass при firmware fault, семантика `ground`/`groundCtrl` (писати разом із фіксом інверсії — застрахує від регресу).
+- [ ] **Тести daily-сенсорів** — найкапризніша логіка проєкту: полуночний rollover, restore після рестарту (той самий день / наступний), скидання `sessionTime` при новій сесії (негативна дельта), сесія через північ.
+- [ ] **Тести config flow** — happy path, `cannot_connect`, `invalid_auth`, `prefix_taken`, дублікат IP (abort), reconfigure, reauth. Стандартний мінімум якісної інтеграції.
+- [ ] **Contract/golden-тести на mockData** — прогнати реальні Postman-снапшоти (`mockData/`, Bolt V1 і VW V2) через `transform_data` цілком і порівняти повний результат. Пінить контракт живого пристрою, страхує майбутні рефакторинги charger-пакета.
+- [ ] **Тести `TimeDriftSensor`** — wrap через північ (±43200), антифлікер (<30s → 0, округлення до 10s). Майже чиста функція, дешево.
+- [ ] (опц.) **Snapshot-тести (syrupy)** — стандарт HA-core: слепок усіх сутностей/станів; будь-яка ненавмисна зміна контракту сутностей ламає тест.
+
+## Smoke-інструменти (рекомендації рев'ю 2026-07-17)
+
+- [ ] **Live-смоук пристрою (read-only)** — розвиток `.claude/tools/capture_api.py`: дьорнути `/main` обох зарядок, прогнати через `transform_data`, провалідувати ключі/типи/enum-значення і звірити з `capabilities`. Ловить дрейф контракту після оновлень прошивки, працює без HA. Синергія з бэклог-пунктом live API capture.
+- [ ] **Прод-смоук HA через REST API** — скрипт із long-lived token: усі сутності інтеграції не `unavailable`/`unknown`, очікувана кількість сутностей, немає repair issues домену. Автоматизує прод-перевірку (тест-план 0.3.5+ досі не пройдено, бо ручний).
+
+## Best practices HA (рекомендації рев'ю 2026-07-17)
+
+- [ ] **`entry.runtime_data` замість `hass.data[DOMAIN][entry_id]`** — сучасний паттерн: типізований `ConfigEntry[EveusData]` (dataclass із charger/coordinator/prefix), прибирає словники-по-ключах.
+- [ ] **`PARALLEL_UPDATES = 0`** у кожному модулі платформи — вимога quality scale для coordinator-інтеграцій.
+- [ ] **Типізація** — аннотації `async_setup_entry` у платформах (`HomeAssistant`, `ConfigEntry`, `AddEntitiesCallback`), параметризувати `DataUpdateCoordinator[dict[str, Any]]`.
+- [ ] **ruff у CI** — зараз лише hassfest/HACS/pytest, лінта немає. Конфіг за зразком HA-core; опц. pre-commit.
+- [ ] **Quality scale checklist як roadmap** — формальна шкала HA (bronze/silver/gold/platinum, `quality_scale.yaml`): пройтись чеклістом, зафіксувати поточний рівень (~silver) і брати наступні пункти звідти замість гадань.
+- [ ] **DHCP discovery** — matchers у manifest за MAC OUI зарядки: HA сам запропонує додати пристрій і переживе зміну IP. OUI зняти під час live capture.
+
 ## Bugs (знайдено при код-рев'ю 2026-07-07)
 
 - [x] **`eveus.set_ai_mode` зламаний як задокументований** — `services.yaml` пропонує опції `Off`, `Voltage`, `Tesla (auto)`, `Power`, але сервіс проксює їх у `select.select_option`, а у селекта опції — lowercase-ключі `off`, `voltage`, `tesla_auto`, `power` (`select.py`, `options` = ключі `charger.ai_modes`). Виклик з "Off" падає (option not in options). Фікс: привести опції в `services.yaml` до lowercase-ключів або мапити label→key у хендлері сервісу в `__init__.py`. Заодно: у `set_current` захардкожено `min: 7`, а у V2 мінімум 6A.
