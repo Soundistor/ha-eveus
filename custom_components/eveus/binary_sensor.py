@@ -7,11 +7,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntityDescription,
 )
 from homeassistant.core import callback
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, friendly_device_name
+from .const import DOMAIN
 from .coordinator import FIRMWARE_FAULT_STATES
+from .entity import EveusEntity
 
 # ground=1 → защита активна; groundCtrl=2 → активна (не просто truthy!)
 _ACTIVE_VALUE = {"ground": 1, "groundCtrl": 2}
@@ -38,19 +37,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities, True)
 
 
-class ChargerBinarySensor(CoordinatorEntity, BinarySensorEntity):
-
-    _attr_has_entity_name = True
+class ChargerBinarySensor(EveusEntity, BinarySensorEntity):
 
     def __init__(self, coordinator, charger, description: BinarySensorEntityDescription,
                  prefix: str, entry_id: str):
-        super().__init__(coordinator)
-        self._charger = charger
-        self._entry_id = entry_id
-        self._device_name = friendly_device_name(prefix, charger.ip)
+        super().__init__(coordinator, charger, prefix, entry_id, description.name)
         self.entity_description = description
-        uid = f"{prefix}_{description.name}" if prefix else f"{entry_id}_{description.name}"
-        self._attr_unique_id = uid
         self._debounce_count = 0
         self._debounced_on = False
 
@@ -75,13 +67,3 @@ class ChargerBinarySensor(CoordinatorEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         return self._debounced_on
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry_id)},
-            name=self._device_name,
-            manufacturer="Eveus",
-            model=self._charger.model_name,
-            configuration_url=f"http://{self._charger.ip}",
-        )

@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, friendly_device_name
+from .const import DOMAIN
+from .entity import EveusEntity
 
 BUTTON_FORCE_REFRESH = ButtonEntityDescription(
     key="force_refresh",
@@ -35,19 +34,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities, True)
 
 
-class ChargerButton(CoordinatorEntity, ButtonEntity):
-
-    _attr_has_entity_name = True
+class ChargerButton(EveusEntity, ButtonEntity):
 
     def __init__(self, coordinator, charger, description: ButtonEntityDescription,
                  prefix: str, entry_id: str):
-        super().__init__(coordinator)
-        self._charger = charger
-        self._entry_id = entry_id
-        self._device_name = friendly_device_name(prefix, charger.ip)
+        super().__init__(coordinator, charger, prefix, entry_id, description.name)
         self.entity_description = description
-        uid = f"{prefix}_{description.name}" if prefix else f"{entry_id}_{description.name}"
-        self._attr_unique_id = uid
 
     async def async_press(self) -> None:
         if self.entity_description.key == "force_refresh":
@@ -55,13 +47,3 @@ class ChargerButton(CoordinatorEntity, ButtonEntity):
         elif self.entity_description.key == "sync_time":
             await self._charger.sync_time()
             await self.coordinator.async_request_refresh()
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry_id)},
-            name=self._device_name,
-            manufacturer="Eveus",
-            model=self._charger.model_name,
-            configuration_url=f"http://{self._charger.ip}",
-        )

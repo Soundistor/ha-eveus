@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
-from homeassistant.helpers.entity import DeviceInfo
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, friendly_device_name
+from .const import DOMAIN
+from .entity import EveusEntity
 
 SELECT_DESCRIPTION = SelectEntityDescription(
     key="aiStatus",
@@ -24,18 +23,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
     )
 
 
-class ChargerAIModeSelect(CoordinatorEntity, SelectEntity):
-
-    _attr_has_entity_name = True
+class ChargerAIModeSelect(EveusEntity, SelectEntity):
 
     def __init__(self, coordinator, charger, prefix: str, entry_id: str):
-        super().__init__(coordinator)
-        self._charger = charger
-        self._entry_id = entry_id
-        self._device_name = friendly_device_name(prefix, charger.ip)
+        super().__init__(coordinator, charger, prefix, entry_id, "ai_mode")
         self.entity_description = SELECT_DESCRIPTION
-        uid = f"{prefix}_ai_mode" if prefix else f"{entry_id}_ai_mode"
-        self._attr_unique_id = uid
 
     @property
     def options(self) -> list[str]:
@@ -53,13 +45,3 @@ class ChargerAIModeSelect(CoordinatorEntity, SelectEntity):
         mode = self._charger.ai_modes[option]
         await self._charger.set_ai_mode(mode)
         await self.coordinator.async_request_refresh()
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry_id)},
-            name=self._device_name,
-            manufacturer="Eveus",
-            model=self._charger.model_name,
-            configuration_url=f"http://{self._charger.ip}",
-        )

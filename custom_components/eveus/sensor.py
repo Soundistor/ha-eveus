@@ -11,38 +11,29 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import EntityCategory
 from homeassistant.core import callback
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, friendly_device_name
+from .const import DOMAIN
+from .entity import EveusEntity
+from .charger.v1 import V1_STATE_MAP
+from .charger.v2 import (
+    V2_STATE_MAP,
+    V2_SUBSTATE_ERROR_MAP,
+    V2_SUBSTATE_LIMIT_MAP,
+    AI_MODE_MAP,
+)
 
-_V1_STATE_OPTIONS = [
-    "no_data", "ready", "waiting", "charging", "current_leak", "cpu_error",
-    "no_ground", "overheat_plug", "overheat_relay", "overcurrent", "overvoltage",
-    "undervoltage", "limited_by_time", "limited_by_energy", "limited_by_money",
-    "limited_by_schedule1", "limited_by_schedule2", "disabled_by_user",
-    "relay_stuck", "limited_by_ai_mode",
-]
-_V2_STATE_OPTIONS = [
-    "startup", "system_test", "standby", "connected", "charging",
-    "charge_complete", "paused", "error",
-]
-_STATE_OPTIONS = list(dict.fromkeys(_V1_STATE_OPTIONS + _V2_STATE_OPTIONS)) + ["unknown"]
-
-_SUBSTATE_OPTIONS = [
-    "no_error", "grounding_error", "current_leak_high", "relay_error",
-    "current_leak_low", "box_overheat", "plug_overheat", "pilot_error",
-    "low_voltage", "diode_error", "overcurrent", "interface_timeout",
-    "software_failure", "gfci_test_failure", "high_voltage",
-    "no_limits", "limited_by_user", "energy_limit", "time_limit", "cost_limit",
-    "schedule1_limit", "schedule1_energy_limit", "schedule2_limit",
-    "schedule2_energy_limit", "waiting_for_activation", "paused_by_adaptive_mode",
-    "unknown",
-]
-
-_AI_STATUS_OPTIONS = ["off", "voltage", "tesla_auto", "power", "unknown"]
+# Options built from the charger state maps so they can never drift out of sync.
+_STATE_OPTIONS = list(
+    dict.fromkeys(list(V1_STATE_MAP.values()) + list(V2_STATE_MAP.values()))
+) + ["unknown"]
+_SUBSTATE_OPTIONS = list(
+    dict.fromkeys(
+        list(V2_SUBSTATE_ERROR_MAP.values()) + list(V2_SUBSTATE_LIMIT_MAP.values())
+    )
+) + ["unknown"]
+_AI_STATUS_OPTIONS = list(dict.fromkeys(AI_MODE_MAP.values())) + ["unknown"]
 
 # name = lowercase key — определяет entity_id как {platform}.{prefix}_{name}
 SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
@@ -234,34 +225,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities, True)
 
 
-class ChargerSensor(CoordinatorEntity, SensorEntity):
-
-    _attr_has_entity_name = True
+class ChargerSensor(EveusEntity, SensorEntity):
 
     def __init__(self, coordinator, charger, description: SensorEntityDescription,
                  prefix: str, entry_id: str):
-        super().__init__(coordinator)
-        self._charger = charger
-        self._entry_id = entry_id
-        self._device_name = friendly_device_name(prefix, charger.ip)
+        super().__init__(coordinator, charger, prefix, entry_id, description.name)
         self.entity_description = description
-        uid = f"{prefix}_{description.name}" if prefix else f"{entry_id}_{description.name}"
-        self._attr_unique_id = uid
 
     @property
     def native_value(self):
         return self.coordinator.data.get(self.entity_description.key)
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry_id)},
-            name=self._device_name,
-            manufacturer="Eveus",
-            model=self._charger.model_name,
-            sw_version=self.coordinator.data.get("verFWMain") if self.coordinator.data else None,
-            configuration_url=f"http://{self._charger.ip}",
-        )
 
 
 class TimeDriftSensor(ChargerSensor):
@@ -289,13 +262,21 @@ class TimeDriftSensor(ChargerSensor):
         return int(round(drift / 10.0)) * 10
 
 
-class SessionEnergySensor(ChargerSensor):
+class SessionEnergySensor(ChargerSensor, RestoreEntity):
     """Session energy sensor with last_reset support for correct HA statistics."""
 
     def __init__(self, coordinator, charger, description, prefix, entry_id):
         super().__init__(coordinator, charger, description, prefix, entry_id)
         self._attr_last_reset = None
         self._prev_energy: float | None = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            stored = last_state.attributes.get("last_reset")
+            if stored:
+                self._attr_last_reset = dt_util.parse_datetime(stored)
 
     @callback
     def _handle_coordinator_update(self) -> None:
