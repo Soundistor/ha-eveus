@@ -30,7 +30,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     password = entry.data.get("password")
     prefix = entry.data.get(CONF_DEVICE_PREFIX, "")
 
-    charger = ChargerV1(ip, username, password) if model == MODEL_V1 else ChargerV2(ip, username, password)
+    charger = (
+        ChargerV1(ip, username, password, hass=hass)
+        if model == MODEL_V1
+        else ChargerV2(ip, username, password, hass=hass)
+    )
     device_name = friendly_device_name(prefix, ip)
 
     coordinator = ChargerCoordinator(hass, charger, entry.entry_id, device_name)
@@ -69,8 +73,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        data = hass.data[DOMAIN].pop(entry.entry_id)
-        await data["charger"].close()
+        # The charger uses HA's shared aiohttp session — nothing to close.
+        hass.data[DOMAIN].pop(entry.entry_id)
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, "set_current")
             hass.services.async_remove(DOMAIN, "set_ai_mode")

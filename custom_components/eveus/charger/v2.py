@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from .base import BaseCharger
+from .base import AI_MODE_MAP, BaseCharger
 
 V2_STATE_MAP = {
     0: "startup",      1: "system_test",      2: "standby",
@@ -25,45 +25,16 @@ V2_SUBSTATE_LIMIT_MAP = {
     9: "waiting_for_activation", 10: "paused_by_adaptive_mode",
 }
 
-AI_MODE_MAP = {0: "off", 1: "voltage", 2: "tesla_auto", 3: "power"}
-
-
 class ChargerV2(BaseCharger):
     """API v2 – GBT."""
 
-    async def get_status(self) -> dict:
-        return await self._request("POST", "/main")
-
-    async def set_current(self, value: int) -> None:
-        await self._request(
-            "POST", "/pageEvent",
-            data=f"currentSet={value:02d}",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-
-    async def set_ai_mode(self, mode: int) -> None:
-        await self._request(
-            "POST", "/pageEvent",
-            data=f"pageevent=evseEnabled&aiMode={mode}",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-
     async def set_enabled(self, enabled: bool) -> None:
         # V2: 0 = start charging, 1 = stop charging
-        value = 0 if enabled else 1
-        await self._request(
-            "POST", "/pageEvent",
-            data=f"evseEnabled={value}",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+        await self._post_page_event(f"evseEnabled={0 if enabled else 1}")
 
     async def sync_time(self) -> None:
         ts = int(datetime.now(tz=timezone.utc).timestamp())
-        await self._request(
-            "POST", "/pageEvent",
-            data=f"systemTime={ts}",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+        await self._post_page_event(f"systemTime={ts}")
 
     def is_charging_active(self, enabled_value) -> bool:
         return enabled_value == 0

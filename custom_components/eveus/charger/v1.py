@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .base import BaseCharger
+from .base import AI_MODE_MAP, BaseCharger
 
 V1_STATE_MAP = {
     0: "no_data",      1: "ready",                  2: "waiting",
@@ -16,36 +16,12 @@ V1_STATE_MAP = {
     21: "relay_stuck",           22: "limited_by_ai_mode",
 }
 
-AI_MODE_MAP = {0: "off", 1: "voltage", 2: "tesla_auto", 3: "power"}
-
 
 class ChargerV1(BaseCharger):
     """API v1 – Bolt/Eveus."""
 
-    async def get_status(self) -> dict:
-        return await self._request("POST", "/main")
-
-    async def set_current(self, value: int) -> None:
-        await self._request(
-            "POST", "/pageEvent",
-            data=f"currentSet={value:02d}",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-
-    async def set_ai_mode(self, mode: int) -> None:
-        await self._request(
-            "POST", "/pageEvent",
-            data=f"pageevent=evseEnabled&aiMode={mode}",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
-
     async def set_enabled(self, enabled: bool) -> None:
-        value = 1 if enabled else 0
-        await self._request(
-            "POST", "/pageEvent",
-            data=f"evseEnabled={value}",
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+        await self._post_page_event(f"evseEnabled={1 if enabled else 0}")
 
     def is_charging_active(self, enabled_value) -> bool:
         return enabled_value == 1

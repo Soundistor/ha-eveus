@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Mapping
 
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers.selector import (
@@ -68,15 +69,17 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 for entry in self._async_current_entries()
             ):
                 errors[CONF_DEVICE_PREFIX] = "prefix_taken"
-            elif not await self._test_connection(ip, model, username, password):
-                errors["base"] = "cannot_connect"
             else:
-                await self.async_set_unique_id(ip)
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=f"Eveus {ip}",
-                    data=user_input,
-                )
+                err = await self._test_connection(ip, model, username, password)
+                if err:
+                    errors["base"] = err
+                else:
+                    await self.async_set_unique_id(ip)
+                    self._abort_if_unique_id_configured()
+                    return self.async_create_entry(
+                        title=f"Eveus {ip}",
+                        data=user_input,
+                    )
 
         return self.async_show_form(
             step_id="user",
@@ -99,23 +102,25 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 for e in self._async_current_entries()
             ):
                 errors["base"] = "already_configured"
-            elif not await self._test_connection(ip, model, username, password):
-                errors["base"] = "cannot_connect"
             else:
-                self.hass.config_entries.async_update_entry(
-                    entry,
-                    unique_id=ip,
-                    title=f"Eveus {ip}",
-                    data={
-                        **entry.data,
-                        CONF_IP_ADDRESS: ip,
-                        CONF_MODEL: model,
-                        CONF_USERNAME: username,
-                        CONF_PASSWORD: password,
-                    },
-                )
-                await self.hass.config_entries.async_reload(entry.entry_id)
-                return self.async_abort(reason="reconfigure_successful")
+                err = await self._test_connection(ip, model, username, password)
+                if err:
+                    errors["base"] = err
+                else:
+                    self.hass.config_entries.async_update_entry(
+                        entry,
+                        unique_id=ip,
+                        title=f"Eveus {ip}",
+                        data={
+                            **entry.data,
+                            CONF_IP_ADDRESS: ip,
+                            CONF_MODEL: model,
+                            CONF_USERNAME: username,
+                            CONF_PASSWORD: password,
+                        },
+                    )
+                    await self.hass.config_entries.async_reload(entry.entry_id)
+                    return self.async_abort(reason="reconfigure_successful")
 
         # Prefix is deliberately not offered: entity unique_ids derive from it
         return self.async_show_form(
@@ -147,7 +152,8 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             model = self._reauth_entry.data[CONF_MODEL]
             username = user_input.get(CONF_USERNAME)
             password = user_input.get(CONF_PASSWORD)
-            if await self._test_connection(ip, model, username, password):
+            err = await self._test_connection(ip, model, username, password)
+            if not err:
                 self.hass.config_entries.async_update_entry(
                     self._reauth_entry,
                     data={
@@ -158,7 +164,7 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
-            errors["base"] = "cannot_connect"
+            errors["base"] = err
 
         return self.async_show_form(
             step_id="reauth_confirm",
@@ -173,13 +179,21 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def _test_connection(self, ip: str, model: str,
-                               username: str | None, password: str | None) -> bool:
-        charger = ChargerV1(ip, username, password) if model == MODEL_V1 else ChargerV2(ip, username, password)
+                               username: str | None, password: str | None) -> str | None:
+        """Return None on success, or an error code ('invalid_auth' | 'cannot_connect')."""
+        charger = (
+            ChargerV1(ip, username, password, hass=self.hass)
+            if model == MODEL_V1
+            else ChargerV2(ip, username, password, hass=self.hass)
+        )
         try:
             await charger.get_status()
-            return True
+            return None
+        except aiohttp.ClientResponseError as exc:
+            if exc.status == 401:
+                return "invalid_auth"
+            _LOGGER.debug("Cannot connect to %s (%s): %s", ip, model, exc)
+            return "cannot_connect"
         except Exception as exc:
             _LOGGER.debug("Cannot connect to %s (%s): %s", ip, model, exc)
-            return False
-        finally:
-            await charger.close()
+            return "cannot_connect"
