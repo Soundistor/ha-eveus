@@ -48,6 +48,7 @@
     },
     "error": {
       "cannot_connect": "Cannot connect to the charger. Check the IP address and that the charger is reachable.",
+      "invalid_auth": "The username or password is incorrect.",
       "prefix_taken": "This device prefix is already used by another Eveus charger. Choose a unique prefix.",
       "already_configured": "Another Eveus charger already uses this IP address."
     },
@@ -59,7 +60,7 @@
   },
   "issues": {
     "device_error": {
-      "title": "Eveus charger reported an error",
+      "title": "Error reported by charger {device_name}",
       "description": "The Eveus charger is reachable but the integration could not read its status. Check the credentials and that the configured API version (v1/v2) matches the firmware, then reload the integration. (A charger that is simply powered off or unplugged does not trigger this — its entities just become unavailable.)"
     }
   },

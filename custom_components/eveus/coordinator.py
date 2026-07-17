@@ -49,7 +49,7 @@ class ChargerCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            name="EV charger",
+            name=device_name,
             update_interval=timedelta(seconds=update_interval),
         )
         self.charger = charger
@@ -64,7 +64,7 @@ class ChargerCoordinator(DataUpdateCoordinator):
         try:
             raw = await self.charger.get_status()
             data = self.charger.transform_data(raw)
-            ir.async_delete_issue(self.hass, DOMAIN, "device_error")
+            ir.async_delete_issue(self.hass, DOMAIN, f"device_error_{self._entry_id}")
             # Dynamic polling: 30s while charging, 60s otherwise
             self.update_interval = timedelta(
                 seconds=30 if data.get("state") == "charging" else 60
@@ -74,30 +74,35 @@ class ChargerCoordinator(DataUpdateCoordinator):
         except UNREACHABLE_ERRORS as exc:
             # Expected when the charger is unplugged/powered off — entities go
             # unavailable; don't raise a repair issue.
+            self._prev_state = None
             raise UpdateFailed(f"Charger unreachable: {exc}") from exc
         except aiohttp.ClientResponseError as exc:
+            self._prev_state = None
             if exc.status == 401:
                 # Invalid credentials — HA starts the re-auth flow.
                 raise ConfigEntryAuthFailed(f"Invalid credentials: {exc}") from exc
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
-                "device_error",
+                f"device_error_{self._entry_id}",
                 is_fixable=False,
                 severity=ir.IssueSeverity.ERROR,
                 translation_key="device_error",
+                translation_placeholders={"device_name": self._device_name},
             )
             raise UpdateFailed(f"Error updating: {exc}") from exc
         except Exception as exc:
             # Charger answered but the request failed (auth, malformed response,
             # wrong firmware model, …) — this needs the user's attention.
+            self._prev_state = None
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
-                "device_error",
+                f"device_error_{self._entry_id}",
                 is_fixable=False,
                 severity=ir.IssueSeverity.ERROR,
                 translation_key="device_error",
+                translation_placeholders={"device_name": self._device_name},
             )
             raise UpdateFailed(f"Error updating: {exc}") from exc
 
