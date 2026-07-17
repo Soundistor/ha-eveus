@@ -133,6 +133,8 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | `sessionenergy` | kWh | Energy this session |
 | `totalenergy` | kWh | Total energy (cumulative) |
 | `energy_daily` | kWh | Charging energy since local midnight (resets daily, survives restart) |
+| `last_session_energy` | kWh | Energy of the previous completed session, frozen at session end (survives restart) |
+| `last_session_duration` | s | Duration of the previous completed session, frozen at session end (survives restart) |
 | `systemtime` | — | Charger clock (diagnostic; disabled by default — enable manually if needed) |
 | `time_drift` | s | Charger clock offset vs HA time, `0` = in sync (diagnostic) |
 | `leakvalue` | mA | Leakage current (diagnostic) |
@@ -169,6 +171,17 @@ Besides the entities above, two services are available for automations and scrip
 | `eveus.set_ai_mode` | Set the AI / adaptive power mode. Values: `off`, `voltage`, `tesla_auto`, `power` (V1 supports only `off` and `voltage`). |
 
 `set_current` targets the charger's `number` entity, `set_ai_mode` — its `select` entity.
+
+## Events
+
+The integration fires events on the Home Assistant bus at charging-session transitions, so automations can trigger without polling. Filter by `entry_id` or `device_name` when you run more than one charger.
+
+| Event | Fired when | Data |
+|-------|-----------|------|
+| `eveus_charging_started` | The charger enters the charging state (including resume from pause) | `entry_id`, `device_name` |
+| `eveus_session_ended` | A session finishes (leaves the charging/paused states) | `entry_id`, `device_name`, `energy_kwh`, `duration_s`, `ended_state`, `ended_at` |
+
+The energy and duration in `eveus_session_ended` are the final session values captured just before the charger resets its counters for the next session — the same figures the `last_session_*` sensors keep.
 
 ## Localizations
 
