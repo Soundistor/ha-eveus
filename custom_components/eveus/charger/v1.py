@@ -63,12 +63,17 @@ class ChargerV1(BaseCharger):
         # Map enums to strings
         raw["state"] = V1_STATE_MAP.get(int(raw.get("state", 0)), "unknown")
         raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "unknown")
-        # systemTime: "HH:MM:SS" from device → timezone-aware datetime (today's local date)
+        # systemTime: device sends a wall-clock "HH:MM:SS" (no date, no tz).
+        # Return it as a naive datetime (today's date, device wall-clock) and let
+        # the coordinator localize it to HA's configured timezone — this package
+        # loads without homeassistant, so dt_util isn't available here, and using
+        # the OS-local tz would make the derived time_drift wrong when HA runs in
+        # a different timezone than the host.
         sys_time = raw.get("systemTime")
         if sys_time:
             try:
                 t = datetime.strptime(sys_time, "%H:%M:%S").time()
-                raw["systemTime"] = datetime.now().astimezone().replace(
+                raw["systemTime"] = datetime.now().replace(
                     hour=t.hour, minute=t.minute, second=t.second, microsecond=0
                 )
             except ValueError:

@@ -9,7 +9,7 @@ STALE_STATE_AFTER, so a back-dated `_last_success` reproduces a long offline.
 """
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from unittest.mock import Mock
 
 import aiohttp
@@ -206,3 +206,32 @@ async def test_dynamic_interval(hass):
 
     await _poll_ok(coord, state="standby")
     assert coord.update_interval == timedelta(seconds=60)
+
+
+# --------------------------------------------------------------------------- #
+# (e) systemTime localization: V1 sends a naive wall-clock; the coordinator
+#     localizes it to HA's timezone (not the host OS tz).
+# --------------------------------------------------------------------------- #
+
+async def test_naive_system_time_localized_to_ha_tz(hass):
+    await hass.config.async_set_time_zone("Europe/Kyiv")
+    coord = _make_coordinator(hass)
+
+    data = await _poll_ok(coord, state="standby",
+                          systemTime=datetime(2026, 7, 1, 1, 25, 50))
+    st = data["systemTime"]
+
+    # Now tz-aware in HA's zone, wall-clock components preserved.
+    assert st.tzinfo is not None
+    assert st.utcoffset() == dt_util.now().utcoffset()   # Europe/Kyiv, not the host
+    assert (st.hour, st.minute, st.second) == (1, 25, 50)
+
+
+async def test_aware_system_time_passes_through(hass):
+    """V2 already returns an absolute UTC datetime — leave it untouched."""
+    await hass.config.async_set_time_zone("Europe/Kyiv")
+    coord = _make_coordinator(hass)
+
+    aware = dt_util.utcnow().replace(microsecond=0)
+    data = await _poll_ok(coord, state="standby", systemTime=aware)
+    assert data["systemTime"] == aware

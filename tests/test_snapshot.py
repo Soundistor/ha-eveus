@@ -14,7 +14,6 @@ Regenerate after an intentional contract change:
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import json
 from pathlib import Path
 
@@ -28,26 +27,6 @@ from custom_components.eveus.const import DOMAIN
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures"
 _FROZEN = "2026-07-01T12:00:00+00:00"
-
-
-class _UTCNowDatetime(datetime):
-    """Pin V1 systemTime interpretation to UTC.
-
-    V1 sends only "HH:MM:SS" (no date, no tz); charger/v1.py builds the instant
-    with datetime.now().astimezone(), which bakes the *host's* local timezone
-    into the derived time_drift value — deterministic per machine but different
-    between a local dev box and CI. Forcing UTC here keeps the drift snapshot
-    host-independent without touching the standalone (HA-free) charger package.
-    """
-
-    @classmethod
-    def now(cls, tz=None):
-        real = datetime.now(UTC)  # freezegun-frozen instant
-        return cls(real.year, real.month, real.day,
-                   real.hour, real.minute, real.second, real.microsecond)
-
-    def astimezone(self, tz=None):
-        return self.replace(tzinfo=UTC)
 
 
 @pytest.fixture
@@ -104,12 +83,15 @@ async def _assert_snapshot(hass, entry, snapshot):
 
 async def test_snapshot_v2(hass, snapshot, freezer, monkeypatch):
     freezer.move_to(_FROZEN)
+    await hass.config.async_set_time_zone("UTC")
     entry = await _setup(hass, monkeypatch, "v2", _main_body_for("v2"), "e_v2")
     await _assert_snapshot(hass, entry, snapshot)
 
 
 async def test_snapshot_v1(hass, snapshot, freezer, monkeypatch):
     freezer.move_to(_FROZEN)
-    monkeypatch.setattr("custom_components.eveus.charger.v1.datetime", _UTCNowDatetime)
+    # Pin HA's timezone so the V1 time_drift value (localized from the device's
+    # wall-clock systemTime via dt_util) is deterministic across hosts.
+    await hass.config.async_set_time_zone("UTC")
     entry = await _setup(hass, monkeypatch, "v1", _main_body_for("v1"), "e_v1")
     await _assert_snapshot(hass, entry, snapshot)

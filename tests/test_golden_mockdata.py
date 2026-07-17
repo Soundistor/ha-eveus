@@ -47,9 +47,10 @@ def test_golden_v1():
     out_system_time = out.pop("systemTime")
     assert out == expected
 
-    # V1 systemTime is time-only ("01:25:50") -> today's date, tz-aware.
+    # V1 systemTime is time-only ("01:25:50") -> naive datetime (today's date);
+    # the coordinator localizes it to HA's timezone, so charger output is naive.
     assert isinstance(out_system_time, datetime)
-    assert out_system_time.tzinfo is not None
+    assert out_system_time.tzinfo is None
     assert (out_system_time.hour, out_system_time.minute, out_system_time.second) == (1, 25, 50)
 
     # Single-phase device: phase 2/3 measurements are always zero.

@@ -47,9 +47,10 @@ def test_system_time_valid():
     out = _charger().transform_data({"systemTime": "12:34:56"})
     ts = out["systemTime"]
     assert isinstance(ts, datetime)
-    assert ts.tzinfo is not None
+    # Naive wall-clock time-of-day: the coordinator localizes it to HA's tz.
+    assert ts.tzinfo is None
     assert (ts.hour, ts.minute, ts.second) == (12, 34, 56)
-    assert ts.date() == datetime.now().astimezone().date()
+    assert ts.date() == datetime.now().date()
 
 
 def test_system_time_invalid():

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
@@ -88,6 +88,15 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             raw = await self.charger.get_status()
             data = self.charger.transform_data(raw)
+            # V1 reports systemTime as a naive wall-clock time-of-day; localize it
+            # to an absolute instant using HA's configured timezone (not the host
+            # OS tz). V2 already returns an absolute UTC datetime — leave anything
+            # tz-aware untouched.
+            st = data.get("systemTime")
+            if isinstance(st, datetime) and st.tzinfo is None:
+                data["systemTime"] = dt_util.now().replace(
+                    hour=st.hour, minute=st.minute, second=st.second, microsecond=0
+                )
             ir.async_delete_issue(self.hass, DOMAIN, f"device_error_{self._entry_id}")
             # Dynamic polling: 30s while charging, 60s otherwise
             self.update_interval = timedelta(
