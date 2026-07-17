@@ -187,6 +187,26 @@ _TIME_DRIFT_DESCRIPTION = SensorEntityDescription(
     icon="mdi:clock-alert-outline",
 )
 
+# No state_class: frozen snapshots of a finished session, long-term statistics
+# are meaningless.
+_LAST_SESSION_ENERGY_DESCRIPTION = SensorEntityDescription(
+    key="sessionEnergy",
+    name="last_session_energy",
+    translation_key="last_session_energy",
+    native_unit_of_measurement="kWh",
+    device_class=SensorDeviceClass.ENERGY,
+    icon="mdi:history",
+)
+
+_LAST_SESSION_DURATION_DESCRIPTION = SensorEntityDescription(
+    key="sessionTime",
+    name="last_session_duration",
+    translation_key="last_session_duration",
+    native_unit_of_measurement="s",
+    device_class=SensorDeviceClass.DURATION,
+    icon="mdi:history",
+)
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
@@ -207,6 +227,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.append(DailySessionTimeSensor(coordinator, charger, prefix, entry.entry_id))
     if "systemTime" in charger.capabilities:
         entities.append(TimeDriftSensor(coordinator, charger, _TIME_DRIFT_DESCRIPTION, prefix, entry.entry_id))
+    if "sessionEnergy" in charger.capabilities:
+        entities.append(LastSessionSensor(coordinator, charger, _LAST_SESSION_ENERGY_DESCRIPTION, prefix, entry.entry_id, "energy_kwh"))
+    if "sessionTime" in charger.capabilities:
+        entities.append(LastSessionSensor(coordinator, charger, _LAST_SESSION_DURATION_DESCRIPTION, prefix, entry.entry_id, "duration_s"))
     async_add_entities(entities, True)
 
 
@@ -391,4 +415,39 @@ class DailySessionTimeSensor(ChargerSensor, RestoreEntity):
                 self._accumulated += delta
         if current is not None:
             self._prev = current
+        super()._handle_coordinator_update()
+
+
+class LastSessionSensor(ChargerSensor, RestoreEntity):
+    """Frozen snapshot of the last finished session (energy or duration).
+
+    coordinator.last_session resets to None on HA restart/reload, so the
+    value is restored from the entity's last recorded state.
+    """
+
+    def __init__(self, coordinator, charger, description, prefix, entry_id, field):
+        super().__init__(coordinator, charger, description, prefix, entry_id)
+        self._field = field
+        self._value = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                self._value = float(last_state.state)
+            except (ValueError, TypeError):
+                pass
+
+    @property
+    def native_value(self):
+        return self._value
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        last_session = self.coordinator.last_session
+        if last_session:
+            value = last_session.get(self._field)
+            if value is not None:
+                self._value = value
         super()._handle_coordinator_update()

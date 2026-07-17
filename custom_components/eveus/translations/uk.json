@@ -159,7 +159,9 @@
       "iem1": { "name": "Лічильник енергії 1" },
       "iem2": { "name": "Лічильник енергії 2" },
       "energy_daily": { "name": "Енергія за день" },
-      "session_time_daily": { "name": "Час зарядки за день" }
+      "session_time_daily": { "name": "Час зарядки за день" },
+      "last_session_energy": { "name": "Енергія останньої сесії" },
+      "last_session_duration": { "name": "Тривалість останньої сесії" }
     },
     "binary_sensor": {
       "ground": { "name": "Заземлення" },

@@ -159,7 +159,9 @@
       "iem1": { "name": "Счётчик энергии 1" },
       "iem2": { "name": "Счётчик энергии 2" },
       "energy_daily": { "name": "Энергия за день" },
-      "session_time_daily": { "name": "Время зарядки за день" }
+      "session_time_daily": { "name": "Время зарядки за день" },
+      "last_session_energy": { "name": "Энергия последней сессии" },
+      "last_session_duration": { "name": "Длительность последней сессии" }
     },
     "binary_sensor": {
       "ground": { "name": "Заземление" },

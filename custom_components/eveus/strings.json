@@ -159,7 +159,9 @@
       "iem1": { "name": "Energy Meter 1" },
       "iem2": { "name": "Energy Meter 2" },
       "energy_daily": { "name": "Daily Energy" },
-      "session_time_daily": { "name": "Daily Session Time" }
+      "session_time_daily": { "name": "Daily Session Time" },
+      "last_session_energy": { "name": "Last Session Energy" },
+      "last_session_duration": { "name": "Last Session Duration" }
     },
     "binary_sensor": {
       "ground": { "name": "Ground" },
