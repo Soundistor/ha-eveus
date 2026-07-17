@@ -27,7 +27,7 @@
 ## Тести (рекомендації рев'ю 2026-07-17)
 
 - [ ] **`pytest-homeassistant-custom-component`** — інфраструктурний крок, розблоковує все нижче: фікстура `hass`, `aioclient_mock`, тестування config flow/координатора/сутностей без реального HA. Заодно прибрати standalone-костиль завантаження пакета charger у `tests/conftest.py`.
-- [ ] **Тести координатора** — найцінніше, тут жили баги: (а) `_process_session_events` stateful-частина — захват live-значень, скидання `_prev_state` при офлайні, події на переходах; (б) шляхи помилок — 401 → `ConfigEntryAuthFailed`, unreachable → `UpdateFailed` без repair issue, інша помилка → issue з id `device_error_{entry_id}`; (в) динамічний інтервал 30/60s.
+- [x] **Тести координатора** — найцінніше, тут жили баги: (а) `_process_session_events` stateful-частина — захват live-значень, скидання `_prev_state` при офлайні, події на переходах; (б) шляхи помилок — 401 → `ConfigEntryAuthFailed`, unreachable → `UpdateFailed` без repair issue, інша помилка → issue з id `device_error_{entry_id}`; (в) динамічний інтервал 30/60s.
 - [ ] **Тести binary sensor** — табличні «послідовність значень → очікуваний is_on»: debounce (N підряд), bypass при firmware fault, семантика `ground`/`groundCtrl` (писати разом із фіксом інверсії — застрахує від регресу).
 - [ ] **Тести daily-сенсорів** — найкапризніша логіка проєкту: полуночний rollover, restore після рестарту (той самий день / наступний), скидання `sessionTime` при новій сесії (негативна дельта), сесія через північ.
 - [ ] **Тести config flow** — happy path, `cannot_connect`, `invalid_auth`, `prefix_taken`, дублікат IP (abort), reconfigure, reauth. Стандартний мінімум якісної інтеграції.
