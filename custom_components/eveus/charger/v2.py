@@ -26,7 +26,7 @@ V2_SUBSTATE_LIMIT_MAP = {
 }
 
 class ChargerV2(BaseCharger):
-    """API v2 – GBT."""
+    """API v2 – Eveus."""
 
     async def set_enabled(self, enabled: bool) -> None:
         # V2: 0 = start charging, 1 = stop charging

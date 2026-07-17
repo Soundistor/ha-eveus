@@ -6,6 +6,10 @@ disabled-by-default entities — and (b) all entity states. Time is frozen so th
 clock-derived sensors (TimeDriftSensor, daily sensors, systemTime) are
 deterministic. Any unintended change to the entity contract breaks the test.
 
+The Postman collections are discovered by globbing mockData/ and classified by
+payload content (V2 carries subState/verFWMain, V1 does not) — no snapshot
+filenames are hard-coded.
+
 Regenerate after an intentional contract change:
     python -m pytest tests/test_snapshot.py --snapshot-update
 """
@@ -31,8 +35,8 @@ def snapshot(snapshot: SnapshotAssertion) -> SnapshotAssertion:
     return snapshot.use_extension(HomeAssistantSnapshotExtension)
 
 
-def _main_body(filename: str) -> dict:
-    collection = json.loads((_MOCKDATA / filename).read_text(encoding="utf-8"))
+def _extract_main(path: Path) -> dict | None:
+    collection = json.loads(path.read_text(encoding="utf-8"))
 
     def walk(items):
         for item in items:
@@ -50,6 +54,18 @@ def _main_body(filename: str) -> dict:
         return None
 
     return walk(collection.get("item", []))
+
+
+def _main_body_for(family: str) -> dict:
+    """Discover the /main body for a firmware family from mockData."""
+    for path in sorted(_MOCKDATA.glob("*.postman_collection.json")):
+        body = _extract_main(path)
+        if body is None:
+            continue
+        detected = "v2" if ("subState" in body or "verFWMain" in body) else "v1"
+        if detected == family:
+            return body
+    pytest.skip(f"no {family} /main snapshot in mockData")
 
 
 async def _setup(hass, monkeypatch, model, raw, entry_id):
@@ -96,13 +112,11 @@ async def _assert_snapshot(hass, entry, snapshot):
 
 async def test_snapshot_v2(hass, snapshot, freezer, monkeypatch):
     freezer.move_to(_FROZEN)
-    entry = await _setup(hass, monkeypatch, "v2",
-                         _main_body("Eveus API VW.postman_collection.json"), "e_v2")
+    entry = await _setup(hass, monkeypatch, "v2", _main_body_for("v2"), "e_v2")
     await _assert_snapshot(hass, entry, snapshot)
 
 
 async def test_snapshot_v1(hass, snapshot, freezer, monkeypatch):
     freezer.move_to(_FROZEN)
-    entry = await _setup(hass, monkeypatch, "v1",
-                         _main_body("Eveus API Bolt.postman_collection.json"), "e_v1")
+    entry = await _setup(hass, monkeypatch, "v1", _main_body_for("v1"), "e_v1")
     await _assert_snapshot(hass, entry, snapshot)

@@ -18,7 +18,7 @@ V1_STATE_MAP = {
 
 
 class ChargerV1(BaseCharger):
-    """API v1 – Bolt/Eveus."""
+    """API v1 – Eveus."""
 
     async def set_enabled(self, enabled: bool) -> None:
         await self._post_page_event(f"evseEnabled={1 if enabled else 0}")

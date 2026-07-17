@@ -4,10 +4,11 @@ Pins the live-device contract for both firmware families so any future change
 to the charger package's output (scaling, enum maps, added/dropped keys) is
 caught. Loaded standalone via the conftest `charger` shim — no homeassistant.
 
-Instead of copying ~40/~90 literal values, each expected dict is built from the
-raw body with the exact fields transform_data changes overridden. That both
-pins the full result AND documents precisely what the transform touches, while
-staying robust to float representation (same json.loads doubles on both sides).
+The Postman collections are discovered by globbing mockData/ and classified by
+payload content (V2 carries subState/verFWMain, V1 does not) — no snapshot
+filenames are hard-coded. Each expected dict is built from the raw body with the
+exact fields transform_data changes overridden, so the assertion pins the full
+result while staying robust to float representation.
 """
 from __future__ import annotations
 
@@ -22,9 +23,9 @@ import pytest
 _MOCKDATA = Path(__file__).resolve().parents[1] / "mockData"
 
 
-def _extract_main(filename: str) -> dict:
+def _extract_main(path: Path) -> dict | None:
     """Return the saved POST /main response body from a Postman collection."""
-    collection = json.loads((_MOCKDATA / filename).read_text(encoding="utf-8"))
+    collection = json.loads(path.read_text(encoding="utf-8"))
 
     def walk(items):
         for item in items:
@@ -41,14 +42,30 @@ def _extract_main(filename: str) -> dict:
                     return json.loads(responses[0]["body"])
         return None
 
-    body = walk(collection.get("item", []))
+    return walk(collection.get("item", []))
+
+
+def _main_bodies() -> dict[str, dict]:
+    """Discover /main bodies from mockData, keyed by firmware family (v1/v2)."""
+    bodies: dict[str, dict] = {}
+    for path in sorted(_MOCKDATA.glob("*.postman_collection.json")):
+        body = _extract_main(path)
+        if body is None:
+            continue
+        family = "v2" if ("subState" in body or "verFWMain" in body) else "v1"
+        bodies[family] = body
+    return bodies
+
+
+def _body(family: str) -> dict:
+    body = _main_bodies().get(family)
     if body is None:
-        pytest.skip(f"no saved /main response body in {filename}")
+        pytest.skip(f"no {family} /main snapshot in mockData")
     return body
 
 
-def test_golden_v1_bolt():
-    raw = _extract_main("Eveus API Bolt.postman_collection.json")
+def test_golden_v1():
+    raw = _body("v1")
     out = ChargerV1("1.2.3.4").transform_data(dict(raw))
 
     # V1 transform: state/aiStatus -> lowercase strings, current/energy scaled
@@ -75,8 +92,8 @@ def test_golden_v1_bolt():
     assert (raw["curMeas2"], raw["curMeas3"], raw["voltMeas2"], raw["voltMeas3"]) == (0, 0, 0, 0)
 
 
-def test_golden_v2_vw():
-    raw = _extract_main("Eveus API VW.postman_collection.json")
+def test_golden_v2():
+    raw = _body("v2")
     out = ChargerV2("1.2.3.4").transform_data(dict(raw))
 
     # V2 transform: state/subState/aiStatus -> lowercase strings, unix
@@ -94,15 +111,9 @@ def test_golden_v2_vw():
     assert (out["curMeas2"], out["curMeas3"], out["voltMeas2"], out["voltMeas3"]) == (0, 0, 0, 0)
 
 
-@pytest.mark.parametrize(
-    "cls,filename",
-    [
-        (ChargerV1, "Eveus API Bolt.postman_collection.json"),
-        (ChargerV2, "Eveus API VW.postman_collection.json"),
-    ],
-)
-def test_transform_does_not_mutate_input(cls, filename):
-    raw = _extract_main(filename)
+@pytest.mark.parametrize("family,cls", [("v1", ChargerV1), ("v2", ChargerV2)])
+def test_transform_does_not_mutate_input(family, cls):
+    raw = _body(family)
     reference = dict(raw)
     cls("1.2.3.4").transform_data(raw)
     assert raw == reference
