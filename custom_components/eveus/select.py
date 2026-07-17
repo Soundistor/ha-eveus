@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .coordinator import EveusConfigEntry
 from .entity import EveusEntity
+
+PARALLEL_UPDATES = 0
 
 SELECT_DESCRIPTION = SelectEntityDescription(
     key="aiStatus",
@@ -14,11 +18,15 @@ SELECT_DESCRIPTION = SelectEntityDescription(
 )
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data[DOMAIN][entry.entry_id]
-    prefix = data.get("prefix", "")
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: EveusConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    data = entry.runtime_data
+    prefix = data.prefix
     async_add_entities(
-        [ChargerAIModeSelect(data["coordinator"], data["charger"], prefix, entry.entry_id)],
+        [ChargerAIModeSelect(data.coordinator, data.charger, prefix, entry.entry_id)],
         True,
     )
 

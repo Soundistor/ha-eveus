@@ -2,16 +2,23 @@
 from __future__ import annotations
 
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .coordinator import EveusConfigEntry
 from .entity import EveusEntity
 
+PARALLEL_UPDATES = 0
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data[DOMAIN][entry.entry_id]
-    prefix = data.get("prefix", "")
-    async_add_entities([ChargerSwitch(data["coordinator"], data["charger"], prefix, entry.entry_id)], True)
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: EveusConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    data = entry.runtime_data
+    prefix = data.prefix
+    async_add_entities([ChargerSwitch(data.coordinator, data.charger, prefix, entry.entry_id)], True)
 
 
 class ChargerSwitch(EveusEntity, SwitchEntity):

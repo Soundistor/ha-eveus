@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN, MODEL_V1, CONF_DEVICE_PREFIX, friendly_device_name
-from .coordinator import ChargerCoordinator
+from .coordinator import ChargerCoordinator, EveusConfigEntry, EveusData
 from .charger.v1 import ChargerV1
 from .charger.v2 import ChargerV2
 
@@ -23,7 +23,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: EveusConfigEntry) -> bool:
     ip = entry.data["ip_address"]
     model = entry.data["model"]
     username = entry.data.get("username")
@@ -40,12 +40,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = ChargerCoordinator(hass, charger, entry.entry_id, device_name)
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {
-        "charger": charger,
-        "coordinator": coordinator,
-        "prefix": prefix,
-    }
+    entry.runtime_data = EveusData(charger=charger, coordinator=coordinator, prefix=prefix)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -70,12 +65,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: EveusConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        # The charger uses HA's shared aiohttp session — nothing to close.
-        hass.data[DOMAIN].pop(entry.entry_id)
-        if not hass.data[DOMAIN]:
+        # The charger uses HA's shared aiohttp session — nothing to close;
+        # entry.runtime_data is cleared by HA automatically.
+        remaining = [
+            e
+            for e in hass.config_entries.async_loaded_entries(DOMAIN)
+            if e.entry_id != entry.entry_id
+        ]
+        if not remaining:
             hass.services.async_remove(DOMAIN, "set_current")
             hass.services.async_remove(DOMAIN, "set_ai_mode")
     return unload_ok

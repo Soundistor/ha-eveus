@@ -10,11 +10,12 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import EntityCategory
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .coordinator import EveusConfigEntry
 from .entity import EveusEntity
 from .charger.v1 import V1_STATE_MAP
 from .charger.v2 import (
@@ -23,6 +24,8 @@ from .charger.v2 import (
     V2_SUBSTATE_LIMIT_MAP,
     AI_MODE_MAP,
 )
+
+PARALLEL_UPDATES = 0
 
 # Options built from the charger state maps so they can never drift out of sync.
 _STATE_OPTIONS = list(
@@ -199,11 +202,15 @@ _LAST_SESSION_DURATION_DESCRIPTION = SensorEntityDescription(
 )
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
-    charger = data["charger"]
-    prefix = data.get("prefix", "")
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: EveusConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    data = entry.runtime_data
+    coordinator = data.coordinator
+    charger = data.charger
+    prefix = data.prefix
 
     entities = []
     for description in SENSOR_DESCRIPTIONS:

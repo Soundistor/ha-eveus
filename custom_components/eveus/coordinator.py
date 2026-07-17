@@ -3,16 +3,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
+from typing import Any
 
 import aiohttp
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from .charger.base import BaseCharger
 from .const import (
     DOMAIN,
     EVENT_CHARGING_STARTED,
@@ -22,6 +26,18 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class EveusData:
+    """Runtime data stored on the config entry (entry.runtime_data)."""
+
+    charger: BaseCharger
+    coordinator: ChargerCoordinator
+    prefix: str
+
+
+type EveusConfigEntry = ConfigEntry[EveusData]
 
 # Charger is unreachable (powered off / unplugged / off the network). This is a
 # normal state for this device — surface it as "unavailable" entities only, not
@@ -44,7 +60,7 @@ FIRMWARE_FAULT_STATES = frozenset({
 })
 
 
-class ChargerCoordinator(DataUpdateCoordinator):
+class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def __init__(
         self,
@@ -69,7 +85,7 @@ class ChargerCoordinator(DataUpdateCoordinator):
         self._live_time = None
         self.last_session = None
 
-    async def _async_update_data(self):
+    async def _async_update_data(self) -> dict[str, Any]:
         try:
             raw = await self.charger.get_status()
             data = self.charger.transform_data(raw)

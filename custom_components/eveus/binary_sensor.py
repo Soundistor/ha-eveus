@@ -6,11 +6,13 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import FIRMWARE_FAULT_STATES
+from .coordinator import EveusConfigEntry, FIRMWARE_FAULT_STATES
 from .entity import EveusEntity
+
+PARALLEL_UPDATES = 0
 
 # ground=1 → защита активна; groundCtrl=2 → активна (не просто truthy!)
 _ACTIVE_VALUE = {"ground": 1, "groundCtrl": 2}
@@ -23,11 +25,15 @@ BINARY_SENSORS = [
 ]
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
-    charger = data["charger"]
-    prefix = data.get("prefix", "")
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: EveusConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    data = entry.runtime_data
+    coordinator = data.coordinator
+    charger = data.charger
+    prefix = data.prefix
 
     entities = []
     for description in BINARY_SENSORS:

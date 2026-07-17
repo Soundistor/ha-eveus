@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .coordinator import EveusConfigEntry
 from .entity import EveusEntity
+
+PARALLEL_UPDATES = 0
 
 BUTTON_FORCE_REFRESH = ButtonEntityDescription(
     key="force_refresh",
@@ -21,11 +25,15 @@ BUTTON_SYNC_TIME = ButtonEntityDescription(
 )
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
-    charger = data["charger"]
-    prefix = data.get("prefix", "")
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: EveusConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    data = entry.runtime_data
+    coordinator = data.coordinator
+    charger = data.charger
+    prefix = data.prefix
 
     entities = [ChargerButton(coordinator, charger, BUTTON_FORCE_REFRESH, prefix, entry.entry_id)]
     if "sync_time" in charger.capabilities:
