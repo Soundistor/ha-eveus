@@ -40,9 +40,9 @@
 - [ ] Binary sensor "Has Error" — `state == "Error"`, для алертів
 - [ ] Binary sensor "Is Limited" — `subState != "No Limits"` за відсутності помилки; сигналізує що зарядка йде але обмежена
 - [ ] Binary sensor "Connectivity" — `is_on = coordinator.last_update_success`; стандартний HA спосіб показувати онлайн/офлайн статус пристрою
-- [ ] Event `eveus_session_ended` — стріляти при переході Charging/Paused → Standby/Complete з даними session_energy, session_time. Шпаргалка — ABovsh v4.18: у payload session summary (energy/duration/reason), НЕ реплеїти переходи, що сталися поки зарядка/HA були офлайн; device triggers у UI автоматизацій — щоб тригер обирався з дропдауна без YAML
-- [ ] Event `eveus_charging_started` — симетрія до session_ended для автоматизацій
-- [ ] Last Session сенсори — прошивка стирає лічильники сесії при старті наступної, тож фінальні цифри минулої сесії зникають щойно встромив кабель. Сенсори-фіксатори (energy, duration; RestoreEntity) захоплюють значення в момент завершення сесії і тримають до наступного завершення. ABovsh додав у v4.18 — підтверджений попит
+- [ ] +toNextRelease: Event `eveus_session_ended` — стріляти при переході Charging/Paused → Standby/Complete з даними session_energy, session_time. Шпаргалка — ABovsh v4.18: у payload session summary (energy/duration/reason), НЕ реплеїти переходи, що сталися поки зарядка/HA були офлайн; device triggers у UI автоматизацій — щоб тригер обирався з дропдауна без YAML
+- [ ] +toNextRelease: Event `eveus_charging_started` — симетрія до session_ended для автоматизацій
+- [ ] +toNextRelease: Last Session сенсори — прошивка стирає лічильники сесії при старті наступної, тож фінальні цифри минулої сесії зникають щойно встромив кабель. Сенсори-фіксатори (energy, duration; RestoreEntity) захоплюють значення в момент завершення сесії і тримають до наступного завершення. ABovsh додав у v4.18 — підтверджений попит; мотивація для нас: тригер для сповіщень про завершення сесії (енергія/вартість/тривалість) без polling, корисно і для майбутньої логіки адаптивного струму (реакція на зміну стану)
 
 ## Low priority
 
@@ -51,9 +51,13 @@
 - [ ] Auto sync time при старті (V2) — зараз лише по кнопці; при `async_setup_entry` автоматично викликати `sync_time` щоб годинник зарядки не збивався
 - [ ] SOC system — розрахунок стану батареї EV (SOC%, час до цілі, вартість до цілі). Сумнівна фіча: дані або вводить юзер, або непрямі розрахунки. Реалізація: ABovsh/eveus (ev_sensors.py).
 - [ ] 40A/48A model support — зараз max 32A, додати моделі 40A (EVEUS Pro, hardware max 40A — ABovsh додав у v4.16) та 48A до config flow
+- [ ] Ліміти Time/Energy/Cost (V2-only) — станція вже віддає ці поля, ми їх просто не реалізували: `timeLimitS`/`energyLimitS`/`moneyLimitS` (switch увімкнення), `moneyLimit` (number, значення), `suspendLimits` (master switch — вимкнути всі). Підтверджено по власному mockData VW: поля вже присутні в `/main`, а `V2_SUBSTATE_LIMIT_MAP` у `charger/v2.py` вже розпізнає `time_limit`/`energy_limit`/`cost_limit` як substate — тобто ми вже бачимо, що лімІт спрацював, але не даємо його налаштувати. Це НЕ нова прошивка/API — поля лежать у capabilities-непокритому вигляді щонайменше з 12.06.2026. У V1 (Bolt) цих полів немає — реалізовувати тільки для V2.
 
 ## Backlog / дослідити
 
+- [ ] **Live API capture (коли будемо в одній мережі із зарядкою)** — зняти живі відповіді всіх read-only ендпоінтів (локальний скрипт-снімалка лежить поза гітом, у `.claude/tools/`). Джерело правди для очікуваного контракту — API-репо [eveus-api-doc](https://github.com/Soundistor/eveus-api-doc). Закрити: наявність `pemErr`, `RSSI` у `/main`, `typeEvse` vs `evseType`, невідомі ключі (`rfData`/`SNflag`/`tmp`/`minV`), структуру `/debug` та `/init`, ненульові фази на 3-фазнику. Після зняття — оновити публічний репо `eveus-api-doc` (`API.md`, `openapi.yaml`).
+- [ ] **Read-only сенсори з розбору прошивки (блок 🔴)** — станція віддає в `/main`, ми ігноруємо; безпечні (не пишуть у пристрій): `pilot` (Control Pilot / стан підключення), `pemErr` (помилка землі/PEM — спершу підтвердити на живому), `leakValueH` (поріг УЗО), `sessionMoney` (вартість поточної сесії — на відміну від обчислюваного через тариф, це власне значення пристрою), `IEM1_money`/`IEM2_money` (гроші по двох лічильниках), `activeTarif`. Однофазні — `curMeas2/3`, `voltMeas2/3` НЕ додавати (завжди 0, див. [[single-phase-only]]). Деталі й одиниці — API-репо [eveus-api-doc](https://github.com/Soundistor/eveus-api-doc) (`API.md`).
+- [ ] **Діагностичні/ідентифікаційні сенсори** — `verFWMain`/`verFWWifi`/`verFWStatus`, `fwCRC32`, `stationId` для `device_info` та діагностики; OCPP-статус (`ocppEnabled`/`ocppconnected`/`ocppOfflineAva`) як `binary_sensor`. Читаємо з `/main`, зараз не використовуємо.
 - [ ] IEM1 / IEM2 призначення — з'ясувати що саме рахують два лічильники; якщо IEM1=мережа, IEM2=сонце — можливий сенсор "частка сонячної енергії в сесії"
 - [ ] Адаптивне керування струмом зарядки — НЕ одна voltage-aware фіча, а механізм під кілька сценаріїв з різними тригерами і різною логікою:
     - **Мережа:** тригер — зовнішній сенсор напруги на вводі в дім (вбудований `aiMode=voltage` марний: розетка за стабілізатором, зарядка завжди бачить ~230В). Низька напруга → скид струму, висока → плавний підйом +1A із затримкою.

@@ -70,6 +70,11 @@ Several Home Assistant projects exist for Eveus chargers. This one focuses on:
 | Extra sensors | — | `subState`, `vBat`, `RSSI`, `IEM1`, `IEM2` |
 | Time sync | — | `sync_time` button (writes Unix timestamp to device) |
 
+> **Full HTTP API reference.** The complete endpoint and field documentation —
+> all endpoints, the `/main` field reference, command list, enums, and an OpenAPI
+> 3.1 spec — is maintained in a separate community repository:
+> **[Soundistor/eveus-api-doc](https://github.com/Soundistor/eveus-api-doc)**.
+
 ## Installation
 
 ### Manual
