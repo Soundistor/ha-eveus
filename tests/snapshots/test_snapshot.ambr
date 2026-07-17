@@ -2,6 +2,13 @@
 # name: test_snapshot_v1[registry]
   list([
     tuple(
+      'binary_sensor.eveus_1_2_3_4_connectivity',
+      'e_v1_connectivity',
+      'diagnostic',
+      'Connectivity',
+      False,
+    ),
+    tuple(
       'binary_sensor.eveus_1_2_3_4_ground',
       'e_v1_ground',
       'None',
@@ -187,6 +194,18 @@
 # ---
 # name: test_snapshot_v1[states]
   list([
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'device_class': 'connectivity',
+        'friendly_name': 'Eveus 1.2.3.4 Connectivity',
+      }),
+      'context': <ANY>,
+      'entity_id': 'binary_sensor.eveus_1_2_3_4_connectivity',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'on',
+    }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
         'device_class': 'safety',
@@ -577,6 +596,13 @@
 # name: test_snapshot_v2[registry]
   list([
     tuple(
+      'binary_sensor.eveus_1_2_3_4_connectivity',
+      'e_v2_connectivity',
+      'diagnostic',
+      'Connectivity',
+      False,
+    ),
+    tuple(
       'binary_sensor.eveus_1_2_3_4_ground',
       'e_v2_ground',
       'None',
@@ -804,6 +830,18 @@
 # ---
 # name: test_snapshot_v2[states]
   list([
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'device_class': 'connectivity',
+        'friendly_name': 'Eveus 1.2.3.4 Connectivity',
+      }),
+      'context': <ANY>,
+      'entity_id': 'binary_sensor.eveus_1_2_3_4_connectivity',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'on',
+    }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
         'device_class': 'safety',

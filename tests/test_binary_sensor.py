@@ -12,6 +12,7 @@ from custom_components.eveus.binary_sensor import (
     BINARY_SENSORS,
     DEBOUNCE_THRESHOLD,
     ChargerBinarySensor,
+    EveusConnectivitySensor,
 )
 
 _DESC = {d.key: d for d in BINARY_SENSORS}
@@ -94,3 +95,23 @@ def test_firmware_fault_off_clears_immediately():
     assert sensor.is_on is True
     _feed(sensor, "ground", False, state="cpu_error")  # fault + raw off -> count 0
     assert sensor.is_on is False
+
+
+def _make_connectivity():
+    sensor = EveusConnectivitySensor(_Coord(), _Charger(), "smoke", "e1")
+    sensor.async_write_ha_state = lambda: None
+    return sensor
+
+
+def test_connectivity_tracks_last_update_success():
+    sensor = _make_connectivity()
+    sensor.coordinator.last_update_success = True
+    assert sensor.is_on is True
+    sensor.coordinator.last_update_success = False
+    assert sensor.is_on is False
+
+
+def test_connectivity_available_even_when_offline():
+    sensor = _make_connectivity()
+    sensor.coordinator.last_update_success = False
+    assert sensor.available is True   # reports "disconnected", never unavailable

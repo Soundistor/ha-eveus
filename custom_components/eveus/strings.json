@@ -166,7 +166,8 @@
     },
     "binary_sensor": {
       "ground": { "name": "Ground" },
-      "ground_ctrl": { "name": "Ground Control" }
+      "ground_ctrl": { "name": "Ground Control" },
+      "connectivity": { "name": "Connectivity" }
     },
     "switch": {
       "charging": { "name": "Charging" }

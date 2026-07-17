@@ -166,7 +166,8 @@
     },
     "binary_sensor": {
       "ground": { "name": "Заземлення" },
-      "ground_ctrl": { "name": "Контроль заземлення" }
+      "ground_ctrl": { "name": "Контроль заземлення" },
+      "connectivity": { "name": "З'єднання" }
     },
     "switch": {
       "charging": { "name": "Зарядка" }
