@@ -3,7 +3,3 @@
 # It also brings pytest, pytest-cov, aiohttp, freezegun, pytest-socket, etc.
 pytest-homeassistant-custom-component==0.13.205
 homeassistant==2025.1.4
-
-pytest
-pytest-cov
-aiohttp

@@ -266,7 +266,7 @@ class TimeDriftSensor(ChargerSensor):
         # Anti-flicker: in-sync clocks read exactly 0, real drift in 10s steps
         if abs(drift) < 30:
             return 0
-        return int(round(drift / 10.0)) * 10  # noqa: RUF046  explicit int() documents intent
+        return round(drift / 10.0) * 10
 
 
 class SessionEnergySensor(ChargerSensor, RestoreEntity):
