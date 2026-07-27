@@ -150,7 +150,7 @@
           "schedule1_energy_limit": "Ліміт енергії розкладу 1",
           "schedule2_limit": "Ліміт розкладу 2",
           "schedule2_energy_limit": "Ліміт енергії розкладу 2",
-          "waiting_for_activation": "Очікування активації",
+          "external_limit": "Зовнішнє керування струмом",
           "paused_by_adaptive_mode": "Призупинено адаптивним режимом",
           "unknown": "Невідомо"
         }

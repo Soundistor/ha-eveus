@@ -150,7 +150,7 @@
           "schedule1_energy_limit": "Лимит энергии расписания 1",
           "schedule2_limit": "Лимит расписания 2",
           "schedule2_energy_limit": "Лимит энергии расписания 2",
-          "waiting_for_activation": "Ожидание активации",
+          "external_limit": "Внешнее управление током",
           "paused_by_adaptive_mode": "Приостановлено адаптивным режимом",
           "unknown": "Неизвестно"
         }

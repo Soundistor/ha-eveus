@@ -22,7 +22,7 @@ V2_SUBSTATE_LIMIT_MAP = {
     0: "no_limits",               1: "limited_by_user",           2: "energy_limit",
     3: "time_limit",              4: "cost_limit",                5: "schedule1_limit",
     6: "schedule1_energy_limit",  7: "schedule2_limit",          8: "schedule2_energy_limit",
-    9: "waiting_for_activation", 10: "paused_by_adaptive_mode",
+    9: "external_limit",        10: "paused_by_adaptive_mode",
 }
 
 class ChargerV2(BaseCharger):

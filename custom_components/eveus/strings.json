@@ -150,7 +150,7 @@
           "schedule1_energy_limit": "Schedule 1 Energy Limit",
           "schedule2_limit": "Schedule 2 Limit",
           "schedule2_energy_limit": "Schedule 2 Energy Limit",
-          "waiting_for_activation": "Waiting for Activation",
+          "external_limit": "External Limit",
           "paused_by_adaptive_mode": "Paused by Adaptive Mode",
           "unknown": "Unknown"
         }

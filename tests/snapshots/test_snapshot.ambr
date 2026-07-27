@@ -1258,7 +1258,7 @@
           'schedule1_energy_limit',
           'schedule2_limit',
           'schedule2_energy_limit',
-          'waiting_for_activation',
+          'external_limit',
           'paused_by_adaptive_mode',
           'unknown',
         ]),
