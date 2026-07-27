@@ -6,6 +6,9 @@ import aiohttp
 _FORM_HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 
+# The only body /pageEvent returns when a write was applied.
+_WRITE_OK = "mainPost successfully"
+
 AI_MODE_MAP = {0: "off", 1: "voltage", 2: "tesla_auto", 3: "power"}
 
 
@@ -24,21 +27,47 @@ class BaseCharger:
         self._hass = hass
         self._session: aiohttp.ClientSession | None = None
 
-    async def _request(self, method: str, path: str, **kwargs) -> dict:
+    def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None:
             # Lazy import: keeps the module importable without homeassistant
             # (the charger package is loaded standalone in unit tests).
             from homeassistant.helpers.aiohttp_client import async_get_clientsession
             self._session = async_get_clientsession(self._hass)
+        return self._session
+
+    async def _request(self, method: str, path: str, **kwargs) -> dict:
         url = f"http://{self.ip}{path}"
-        async with self._session.request(
+        async with self._get_session().request(
             method, url, auth=self.auth, timeout=_TIMEOUT, **kwargs
         ) as resp:
             resp.raise_for_status()
             return await resp.json()
 
+    async def _request_text(self, method: str, path: str, **kwargs) -> str:
+        url = f"http://{self.ip}{path}"
+        async with self._get_session().request(
+            method, url, auth=self.auth, timeout=_TIMEOUT, **kwargs
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.text()
+
     async def _post_page_event(self, data: str) -> None:
-        await self._request("POST", "/pageEvent", data=data, headers=_FORM_HEADERS)
+        """Write one parameter and verify the station accepted it.
+
+        /pageEvent never answers JSON: success is the plain text
+        "mainPost successfully", and a refusal is plain text too
+        (ILLEGAL_CMD, "Failed to post control value", "content too long") —
+        always with HTTP 200. So the body is the only signal we get.
+        """
+        body = await self._request_text(
+            "POST", "/pageEvent", data=data, headers=_FORM_HEADERS
+        )
+        if body.strip() != _WRITE_OK:
+            # Lazy import: see _get_session.
+            from homeassistant.exceptions import HomeAssistantError
+            raise HomeAssistantError(
+                f"Charger {self.ip} rejected '{data}': {body.strip()[:200]}"
+            )
 
     async def get_status(self) -> dict:
         return await self._request("POST", "/main")
