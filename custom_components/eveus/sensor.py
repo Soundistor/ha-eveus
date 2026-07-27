@@ -82,9 +82,12 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         device_class=SensorDeviceClass.ENUM, options=_AI_STATUS_OPTIONS,
     ),
     SensorEntityDescription(
+        # Stored configuration (the user-set undervoltage threshold for adaptive
+        # mode), not a live measurement — no state_class, keep it out of the
+        # long-term statistics and away from the real electrical sensors.
         key="aiVoltage", name="aivoltage", translation_key="ai_voltage",
         native_unit_of_measurement="V", device_class=SensorDeviceClass.VOLTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="sessionTime", name="sessiontime", translation_key="session_time",
