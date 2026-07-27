@@ -35,3 +35,15 @@ def test_min_follows_min_current():
 @pytest.mark.parametrize("data", [{}, {"minCurrent": "x"}, {"minCurrent": None}])
 def test_min_falls_back_to_charger_constant(data):
     assert _make(data).native_min_value == 6.0
+
+
+@pytest.mark.parametrize(
+    "data,expected",
+    [
+        ({"curDesign": 32, "gridRange": 1}, 12.0),   # 110 V grid: hard cap
+        ({"curDesign": 32, "gridRange": 0}, 32.0),
+        ({"curDesign": 32}, 32.0),
+    ],
+)
+def test_max_capped_on_110v_grid(data, expected):
+    assert _make(data).native_max_value == expected

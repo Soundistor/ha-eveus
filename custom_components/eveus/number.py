@@ -53,9 +53,14 @@ class ChargerCurrentNumber(EveusEntity, NumberEntity):
     def native_max_value(self) -> float:
         design = self.coordinator.data.get("curDesign") if self.coordinator.data else None
         try:
-            return float(design) if design else 32.0
+            maximum = float(design) if design else 32.0
         except (ValueError, TypeError):
-            return 32.0
+            maximum = 32.0
+        if self.coordinator.data and self.coordinator.data.get("gridRange") == 1:
+            # 110 V grid: the station caps any current at 12 A and writes the
+            # clamp back.
+            return min(maximum, 12.0)
+        return maximum
 
     @property
     def native_value(self) -> float | None:
