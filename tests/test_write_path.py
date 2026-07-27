@@ -1,9 +1,9 @@
 """Write path: /pageEvent answers plain text, never JSON.
 
-Success is the body "mainPost successfully"; a refusal is plain text too and
-still arrives with HTTP 200, so the body is the only thing that tells the two
-apart. Before this was fixed every write raised on resp.json() *after* the
-station had already applied the command.
+Success is the body "OK" (confirmed live on firmware R3.05.4, 2026-07-27); a
+refusal is plain text too and still arrives with HTTP 200, so the body is the
+only thing that tells the two apart. Before this was fixed every write raised
+on resp.json() *after* the station had already applied the command.
 """
 
 from charger.v2 import ChargerV2
@@ -53,16 +53,19 @@ def _charger(body: str) -> tuple[ChargerV2, _FakeSession]:
 
 
 async def test_success_body_accepted() -> None:
-    charger, _ = _charger("mainPost successfully")
+    charger, _ = _charger("OK")
     await charger.set_current(16)
 
 
 async def test_success_body_tolerates_whitespace() -> None:
-    charger, _ = _charger("mainPost successfully\r\n")
+    charger, _ = _charger("OK\r\n")
     await charger.set_current(16)
 
 
 @pytest.mark.parametrize(
+    # Refusal bodies per static firmware analysis — not yet confirmed live,
+    # unlike the "OK" success body above. Any body other than "OK" must raise
+    # regardless of the exact wording.
     "body",
     ["ILLEGAL_CMD", "Failed to post control value", "content too long", ""],
 )
@@ -81,7 +84,7 @@ async def test_refusal_message_names_charger_and_body() -> None:
 
 
 async def test_request_shape() -> None:
-    charger, session = _charger("mainPost successfully")
+    charger, session = _charger("OK")
     await charger.set_current(16)
     method, url, kwargs = session.calls[0]
     assert method == "POST"

@@ -8,8 +8,12 @@ import aiohttp
 _FORM_HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
 
-# The only body /pageEvent returns when a write was applied.
-_WRITE_OK = "mainPost successfully"
+# The body /pageEvent returns when a write was applied. Confirmed live on
+# firmware R3.05.4 (2026-07-27): every accepted write — currentSet, evseEnabled,
+# aiMode — answers "OK". (Static firmware analysis had suggested
+# "mainPost successfully"; that did not match the live device and made every
+# accepted write look rejected — trust the live capture over the disassembly.)
+_WRITE_OK = "OK"
 
 AI_MODE_MAP = {0: "off", 1: "voltage", 2: "tesla_auto", 3: "power"}
 

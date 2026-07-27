@@ -58,7 +58,7 @@ class _RecordingSession:
 
     def request(self, method: str, url: str, **kwargs):
         tag = url.rsplit("/", 1)[-1]
-        return _FakeExchange(self.log, tag, "mainPost successfully")
+        return _FakeExchange(self.log, tag, "OK")
 
 
 def _assert_never_overlapping(log: list[str]) -> None:
