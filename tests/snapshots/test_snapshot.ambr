@@ -1282,7 +1282,7 @@
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
-      'state': '-48798040',
+      'state': '-48805240',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({

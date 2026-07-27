@@ -90,8 +90,8 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data = self.charger.transform_data(raw)
             # V1 reports systemTime as a naive wall-clock time-of-day; localize it
             # to an absolute instant using HA's configured timezone (not the host
-            # OS tz). V2 already returns an absolute UTC datetime — leave anything
-            # tz-aware untouched.
+            # OS tz). V2 resolves its own offset in transform_data and hands us an
+            # absolute UTC datetime — leave anything tz-aware untouched.
             st = data.get("systemTime")
             if isinstance(st, datetime) and st.tzinfo is None:
                 data["systemTime"] = dt_util.now().replace(

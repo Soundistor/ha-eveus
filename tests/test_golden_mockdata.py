@@ -61,14 +61,15 @@ def test_golden_v2():
     raw = _body("v2")
     out = ChargerV2("1.2.3.4").transform_data(dict(raw))
 
-    # V2 transform: state/subState/aiStatus -> lowercase strings, unix
-    # systemTime -> UTC datetime; all other fields (already in real units)
-    # pass through unchanged.
+    # V2 transform: state/subState/aiStatus -> lowercase strings, systemTime ->
+    # UTC datetime with the station's timeZone offset removed (the fixture
+    # carries timeZone: 2, so the raw epoch is two hours ahead of the real
+    # instant); all other fields (already in real units) pass through unchanged.
     expected = dict(raw)
     expected["state"] = "charging"
     expected["subState"] = "no_limits"
     expected["aiStatus"] = "power"
-    expected["systemTime"] = datetime(2024, 12, 12, 16, 59, 21, tzinfo=UTC)
+    expected["systemTime"] = datetime(2024, 12, 12, 14, 59, 21, tzinfo=UTC)
 
     assert out == expected
 

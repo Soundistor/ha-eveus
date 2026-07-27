@@ -42,13 +42,34 @@ def test_ai_status_mapping():
 
 
 def test_system_time_valid():
+    """No timeZone in the payload -> the epoch is taken as is."""
     out = _charger().transform_data({"systemTime": 1751884800})
     assert out["systemTime"] == datetime.fromtimestamp(1751884800, tz=UTC)
     assert out["systemTime"].tzinfo is UTC
 
 
+def test_system_time_subtracts_the_station_offset():
+    """systemTime is UTC + timeZone*3600, not an absolute epoch."""
+    out = _charger().transform_data({"systemTime": 1751884800, "timeZone": 3})
+    assert out["systemTime"] == datetime.fromtimestamp(1751884800 - 3 * 3600, tz=UTC)
+
+
+def test_system_time_negative_offset():
+    out = _charger().transform_data({"systemTime": 1751884800, "timeZone": -5})
+    assert out["systemTime"] == datetime.fromtimestamp(1751884800 + 5 * 3600, tz=UTC)
+
+
 def test_system_time_invalid():
     assert _charger().transform_data({"systemTime": "garbage"})["systemTime"] is None
+
+
+def test_system_time_invalid_timezone():
+    """A garbage timeZone must not take the whole transform down."""
+    out = _charger().transform_data(
+        {"state": 4, "systemTime": 1751884800, "timeZone": "x"}
+    )
+    assert out["systemTime"] is None
+    assert out["state"] == "charging"
 
 
 def test_input_dict_not_mutated():

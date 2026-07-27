@@ -78,11 +78,18 @@ class ChargerV2(BaseCharger):
             mapper = V2_SUBSTATE_ERROR_MAP if state_num == 7 else V2_SUBSTATE_LIMIT_MAP
             raw["subState"] = mapper.get(int(substate_num), "unknown")
         raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "unknown")
-        # systemTime: unix timestamp → UTC datetime object (device_class=TIMESTAMP)
+        # systemTime is NOT an absolute UTC epoch: the station sends
+        # UTC + timeZone*3600, i.e. its own local wall clock encoded as an
+        # epoch. Subtract the offset to get the real instant, otherwise
+        # time_drift reports a permanent offset equal to the configured
+        # timezone on a perfectly healthy clock. (The write direction is the
+        # opposite and already correct — sync_time sends true UTC and the
+        # station adds the offset itself.)
         sys_time = raw.get("systemTime")
         if sys_time:
             try:
-                raw["systemTime"] = datetime.fromtimestamp(int(sys_time), tz=UTC)
-            except (ValueError, OSError):
+                offset = int(raw.get("timeZone", 0)) * 3600
+                raw["systemTime"] = datetime.fromtimestamp(int(sys_time) - offset, tz=UTC)
+            except (ValueError, OSError, TypeError):
                 raw["systemTime"] = None
         return raw
