@@ -65,3 +65,14 @@ def test_input_dict_not_mutated():
     raw = {"curMeas1": 160, "state": 3}
     _charger().transform_data(raw)
     assert raw == {"curMeas1": 160, "state": 3}
+
+
+def test_absent_temperature_sentinel():
+    """Below -50 means "no sensor", not a reading."""
+    out = _charger().transform_data({"temperature1": 34, "temperature2": -60})
+    assert out["temperature1"] == 34
+    assert out["temperature2"] is None
+
+
+def test_temperature_missing_key_is_not_created():
+    assert "temperature1" not in _charger().transform_data({"state": 1})

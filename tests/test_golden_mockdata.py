@@ -33,8 +33,9 @@ def test_golden_v1():
     out = ChargerV1("1.2.3.4").transform_data(dict(raw))
 
     # V1 transform: state/aiStatus -> lowercase strings, current/energy scaled
-    # by 0.1, computed powerMeas added, systemTime parsed to a datetime; every
-    # other field passes through unchanged.
+    # by 0.1, computed powerMeas added, systemTime parsed to a datetime, an
+    # absent temperature sensor blanked; every other field passes through
+    # unchanged.
     expected = dict(raw)
     expected["state"] = "charging"
     expected["aiStatus"] = "off"
@@ -42,6 +43,7 @@ def test_golden_v1():
     expected["sessionEnergy"] = 6.3   # 63 * 0.1
     expected["totalEnergy"] = 1162.0  # 11620 * 0.1
     expected["powerMeas"] = 5045.6    # voltMeas1(212) * raw curMeas1(238) * 0.1
+    expected["temperature2"] = None   # -60 is the "no sensor" sentinel
     del expected["systemTime"]
 
     out_system_time = out.pop("systemTime")

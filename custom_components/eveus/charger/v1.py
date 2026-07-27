@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .base import AI_MODE_MAP, BaseCharger
+from .base import AI_MODE_MAP, BaseCharger, blank_absent_temperature
 
 V1_STATE_MAP = {
     0: "no_data",      1: "ready",                  2: "waiting",
@@ -63,6 +63,9 @@ class ChargerV1(BaseCharger):
         # Map enums to strings
         raw["state"] = V1_STATE_MAP.get(int(raw.get("state", 0)), "unknown")
         raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "unknown")
+        for key in ("temperature1", "temperature2"):
+            if key in raw:
+                raw[key] = blank_absent_temperature(raw[key])
         # systemTime: device sends a wall-clock "HH:MM:SS" (no date, no tz).
         # Return it as a naive datetime (today's date, device wall-clock) and let
         # the coordinator localize it to HA's configured timezone — this package

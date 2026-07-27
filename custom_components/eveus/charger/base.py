@@ -17,6 +17,18 @@ _WRITE_OK = "OK"
 
 AI_MODE_MAP = {0: "off", 1: "voltage", 2: "tesla_auto", 3: "power"}
 
+# Below this the reading is the firmware's "sensor absent" sentinel (the
+# station's own UI shows N/A), not a measurement — typically -60.
+_TEMP_ABSENT_BELOW = -50
+
+
+def blank_absent_temperature(value):
+    """Return None for the 'no sensor' sentinel, the value itself otherwise."""
+    try:
+        return None if float(value) < _TEMP_ABSENT_BELOW else value
+    except (ValueError, TypeError):
+        return value
+
 
 class BaseCharger:
     """Общая часть: запросы через общую сессию HA, базовый интерфейс.

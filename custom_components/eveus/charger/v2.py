@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from .base import AI_MODE_MAP, BaseCharger
+from .base import AI_MODE_MAP, BaseCharger, blank_absent_temperature
 
 V2_STATE_MAP = {
     0: "startup",      1: "system_test",      2: "standby",
@@ -78,6 +78,9 @@ class ChargerV2(BaseCharger):
             mapper = V2_SUBSTATE_ERROR_MAP if state_num == 7 else V2_SUBSTATE_LIMIT_MAP
             raw["subState"] = mapper.get(int(substate_num), "unknown")
         raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "unknown")
+        for key in ("temperature1", "temperature2"):
+            if key in raw:
+                raw[key] = blank_absent_temperature(raw[key])
         # systemTime is NOT an absolute UTC epoch: the station sends
         # UTC + timeZone*3600, i.e. its own local wall clock encoded as an
         # epoch. Subtract the offset to get the real instant, otherwise

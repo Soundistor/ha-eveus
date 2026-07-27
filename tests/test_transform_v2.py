@@ -101,3 +101,16 @@ def test_input_dict_not_mutated():
     raw = {"state": 7, "subState": 3}
     _charger().transform_data(raw)
     assert raw == {"state": 7, "subState": 3}
+
+
+def test_absent_temperature_sentinel():
+    """Below -50 means "no sensor", not a reading."""
+    out = _charger().transform_data({"temperature1": 34, "temperature2": -60})
+    assert out["temperature1"] == 34
+    assert out["temperature2"] is None
+
+
+def test_temperature_boundary_and_garbage():
+    out = _charger().transform_data({"temperature1": -50, "temperature2": "x"})
+    assert out["temperature1"] == -50    # exactly -50 is still a reading
+    assert out["temperature2"] == "x"    # non-numeric left alone, never raises
