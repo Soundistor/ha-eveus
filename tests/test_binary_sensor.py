@@ -1,8 +1,8 @@
 """Binary sensor tests: debounce + firmware-fault bypass (current behavior).
 
-Locks the debounce mechanics against regression. SCOPE: tests behavior AS
-WRITTEN — the ground/groundCtrl inversion fix (Bug 1/2) is Phase 4, blocked on
-a live device, and will bring its own semantics tests. No production change.
+Locks the debounce mechanics against regression. Ground/groundCtrl semantics
+(Bug 1/2) confirmed live on 2026-07-27 (firmware R3.05.4/R3.05.5, "PE control
+On" display matched groundCtrl 0->1) and fixed in binary_sensor.py.
 """
 from __future__ import annotations
 
@@ -16,7 +16,8 @@ from custom_components.eveus.binary_sensor import (
 )
 
 _DESC = {d.key: d for d in BINARY_SENSORS}
-_ACTIVE = {"ground": 1, "groundCtrl": 2}   # raw value that means "on" per key
+_ACTIVE = {"ground": 0, "groundCtrl": 1}   # raw value that means "on" per key
+_INACTIVE = {"ground": 1, "groundCtrl": 0}  # raw value that means "off" per key
 
 
 class _Coord:
@@ -42,7 +43,7 @@ def _make(key):
 
 def _feed(sensor, key, on, *, state="charging", substate=""):
     sensor.coordinator.data = {
-        key: _ACTIVE[key] if on else 0,
+        key: _ACTIVE[key] if on else _INACTIVE[key],
         "state": state,
         "subState": substate,
     }

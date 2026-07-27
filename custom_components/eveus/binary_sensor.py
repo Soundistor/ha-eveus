@@ -15,14 +15,15 @@ from .entity import EveusEntity
 
 PARALLEL_UPDATES = 0
 
-# ground=1 → защита активна; groundCtrl=2 → активна (не просто truthy!)
-_ACTIVE_VALUE = {"ground": 1, "groundCtrl": 2}
+# ground=0 → нет земли, защита активна (SAFETY: on=Unsafe); groundCtrl=1 → PE control
+# включён на станции (конфиг-флаг, не авария) — подтверждено на живом устройстве
+_ACTIVE_VALUE = {"ground": 0, "groundCtrl": 1}
 
 DEBOUNCE_THRESHOLD = 3
 
 BINARY_SENSORS = [
     BinarySensorEntityDescription(key="ground",     name="ground",     translation_key="ground",      device_class=BinarySensorDeviceClass.SAFETY),
-    BinarySensorEntityDescription(key="groundCtrl", name="groundctrl", translation_key="ground_ctrl", device_class=BinarySensorDeviceClass.SAFETY),
+    BinarySensorEntityDescription(key="groundCtrl", name="groundctrl", translation_key="ground_ctrl", entity_category=EntityCategory.DIAGNOSTIC),
 ]
 
 

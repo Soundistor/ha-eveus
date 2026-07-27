@@ -7,6 +7,7 @@ tmp.txt
 
 # API reference / dev tools
 mockData/
+firmware/
 
 # Claude project data
 .claude/

@@ -18,7 +18,7 @@
     tuple(
       'binary_sensor.eveus_1_2_3_4_ground_control',
       'e_v1_groundctrl',
-      'None',
+      'diagnostic',
       'Ground Control',
       False,
     ),
@@ -220,7 +220,6 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
-        'device_class': 'safety',
         'friendly_name': 'Eveus 1.2.3.4 Ground Control',
       }),
       'context': <ANY>,
@@ -612,7 +611,7 @@
     tuple(
       'binary_sensor.eveus_1_2_3_4_ground_control',
       'e_v2_groundctrl',
-      'None',
+      'diagnostic',
       'Ground Control',
       False,
     ),
@@ -856,7 +855,6 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
-        'device_class': 'safety',
         'friendly_name': 'Eveus 1.2.3.4 Ground Control',
       }),
       'context': <ANY>,
