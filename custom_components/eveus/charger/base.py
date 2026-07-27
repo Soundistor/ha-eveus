@@ -1,6 +1,8 @@
 """Базовый класс для всех зарядок."""
 from __future__ import annotations
 
+import asyncio
+
 import aiohttp
 
 _FORM_HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -26,6 +28,12 @@ class BaseCharger:
         self.auth = aiohttp.BasicAuth(username, password or "") if username else None
         self._hass = hass
         self._session: aiohttp.ClientSession | None = None
+        # The station serves exactly ONE connection: a second one does not get
+        # queued or refused, it CLOSES the existing session (seen client-side as
+        # a sudden FIN/RST — ServerDisconnectedError, ConnectionResetError or a
+        # truncated body). Every exchange with the device goes through this lock
+        # so a write never overlaps a poll or another write.
+        self._lock = asyncio.Lock()
 
     def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None:
@@ -37,7 +45,7 @@ class BaseCharger:
 
     async def _request(self, method: str, path: str, **kwargs) -> dict:
         url = f"http://{self.ip}{path}"
-        async with self._get_session().request(
+        async with self._lock, self._get_session().request(
             method, url, auth=self.auth, timeout=_TIMEOUT, **kwargs
         ) as resp:
             resp.raise_for_status()
@@ -45,7 +53,7 @@ class BaseCharger:
 
     async def _request_text(self, method: str, path: str, **kwargs) -> str:
         url = f"http://{self.ip}{path}"
-        async with self._get_session().request(
+        async with self._lock, self._get_session().request(
             method, url, auth=self.auth, timeout=_TIMEOUT, **kwargs
         ) as resp:
             resp.raise_for_status()
