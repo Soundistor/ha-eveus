@@ -21,11 +21,13 @@ class EveusEntity(CoordinatorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
+        # The station sends verFWMain with a trailing space ("GRM070A-R3.05.4 ").
+        version = self.coordinator.data.get("verFWMain") if self.coordinator.data else None
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
             name=self._device_name,
             manufacturer="Eveus",
             model=self._charger.model_name,
-            sw_version=self.coordinator.data.get("verFWMain") if self.coordinator.data else None,
+            sw_version=version.strip() if isinstance(version, str) else version,
             configuration_url=f"http://{self._charger.ip}",
         )
