@@ -7,7 +7,8 @@ from homeassistant.core import HomeAssistant
 from .coordinator import EveusConfigEntry
 
 _TO_REDACT = {"password", "ip_address", "username"}
-_DATA_REDACT = {"serialNum", "serialNumCPU"}
+# STA_IP_Addres — spelled exactly as the firmware sends it (one "s").
+_DATA_REDACT = {"serialNum", "serialNumCPU", "stationId", "STA_IP_Addres"}
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: EveusConfigEntry) -> dict:
