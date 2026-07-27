@@ -72,6 +72,31 @@ def test_system_time_invalid_timezone():
     assert out["state"] == "charging"
 
 
+def test_time_msg_invalidates_system_time():
+    """timeMsg == 1 means the station's clock is unusable."""
+    payload = {
+        "state": 4,
+        "subState": 3,
+        "aiStatus": 2,
+        "systemTime": 1751884800,
+        "timeZone": 3,
+    }
+    healthy = _charger().transform_data({**payload, "timeMsg": 0})
+    invalid = _charger().transform_data({**payload, "timeMsg": 1})
+
+    assert invalid["systemTime"] is None
+    assert healthy["systemTime"] == datetime.fromtimestamp(1751884800 - 3 * 3600, tz=UTC)
+    # Every other field is identical to the healthy case.
+    assert {k: v for k, v in invalid.items() if k not in ("systemTime", "timeMsg")} == {
+        k: v for k, v in healthy.items() if k not in ("systemTime", "timeMsg")
+    }
+
+
+def test_time_msg_zero_keeps_system_time():
+    out = _charger().transform_data({"systemTime": 1751884800, "timeMsg": 0})
+    assert out["systemTime"] == datetime.fromtimestamp(1751884800, tz=UTC)
+
+
 def test_input_dict_not_mutated():
     raw = {"state": 7, "subState": 3}
     _charger().transform_data(raw)

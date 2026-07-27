@@ -85,8 +85,14 @@ class ChargerV2(BaseCharger):
         # timezone on a perfectly healthy clock. (The write direction is the
         # opposite and already correct — sync_time sends true UTC and the
         # station adds the offset itself.)
+        # timeMsg == 1 means the station's clock is invalid (typically a dead
+        # RTC backup battery) — systemTime is then garbage and must not be
+        # decoded at all, or time_drift reports a huge fake offset instead of
+        # unknown.
         sys_time = raw.get("systemTime")
-        if sys_time:
+        if int(raw.get("timeMsg", 0)) == 1:
+            raw["systemTime"] = None
+        elif sys_time:
             try:
                 offset = int(raw.get("timeZone", 0)) * 3600
                 raw["systemTime"] = datetime.fromtimestamp(int(sys_time) - offset, tz=UTC)
