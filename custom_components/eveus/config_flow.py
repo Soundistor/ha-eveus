@@ -51,6 +51,15 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 )
 
 
+def _model_mismatch(payload: dict, model: str) -> bool:
+    """The API generation is unambiguous: only V2 reports verFWWifi.
+
+    A wrong choice otherwise passes the connection check and then silently
+    corrupts every value (the V1 path scales current and energy by 0.1).
+    """
+    return ("verFWWifi" in payload) != (model == MODEL_V2)
+
+
 class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
@@ -71,9 +80,11 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ):
                 errors[CONF_DEVICE_PREFIX] = "prefix_taken"
             else:
-                err = await self._test_connection(ip, model, username, password)
+                err, payload = await self._test_connection(ip, model, username, password)
                 if err:
                     errors["base"] = err
+                elif _model_mismatch(payload, model):
+                    errors["base"] = "model_mismatch"
                 else:
                     await self.async_set_unique_id(ip)
                     self._abort_if_unique_id_configured()
@@ -104,9 +115,11 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ):
                 errors["base"] = "already_configured"
             else:
-                err = await self._test_connection(ip, model, username, password)
+                err, payload = await self._test_connection(ip, model, username, password)
                 if err:
                     errors["base"] = err
+                elif _model_mismatch(payload, model):
+                    errors["base"] = "model_mismatch"
                 else:
                     self.hass.config_entries.async_update_entry(
                         entry,
@@ -153,7 +166,9 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             model = self._reauth_entry.data[CONF_MODEL]
             username = user_input.get(CONF_USERNAME)
             password = user_input.get(CONF_PASSWORD)
-            err = await self._test_connection(ip, model, username, password)
+            # reauth is credentials-only: the model is not offered here, so it
+            # is not re-validated either.
+            err, _payload = await self._test_connection(ip, model, username, password)
             if not err:
                 self.hass.config_entries.async_update_entry(
                     self._reauth_entry,
@@ -180,21 +195,25 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def _test_connection(self, ip: str, model: str,
-                               username: str | None, password: str | None) -> str | None:
-        """Return None on success, or an error code ('invalid_auth' | 'cannot_connect')."""
+                               username: str | None, password: str | None
+                               ) -> tuple[str | None, dict | None]:
+        """Return (error code, /main payload).
+
+        The error code is None on success ('invalid_auth' | 'cannot_connect'
+        otherwise); the payload is None whenever the call failed.
+        """
         charger = (
             ChargerV1(ip, username, password, hass=self.hass)
             if model == MODEL_V1
             else ChargerV2(ip, username, password, hass=self.hass)
         )
         try:
-            await charger.get_status()
-            return None
+            return None, await charger.get_status()
         except aiohttp.ClientResponseError as exc:
             if exc.status == 401:
-                return "invalid_auth"
+                return "invalid_auth", None
             _LOGGER.debug("Cannot connect to %s (%s): %s", ip, model, exc)
-            return "cannot_connect"
+            return "cannot_connect", None
         except Exception as exc:
             _LOGGER.debug("Cannot connect to %s (%s): %s", ip, model, exc)
-            return "cannot_connect"
+            return "cannot_connect", None

@@ -49,6 +49,7 @@
     "error": {
       "cannot_connect": "Cannot connect to the charger. Check the IP address and that the charger is reachable.",
       "invalid_auth": "The username or password is incorrect.",
+      "model_mismatch": "The charger reports a different API generation than the one selected. Choose the other API version.",
       "prefix_taken": "This device prefix is already used by another Eveus charger. Choose a unique prefix.",
       "already_configured": "Another Eveus charger already uses this IP address."
     },

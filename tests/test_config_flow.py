@@ -20,12 +20,16 @@ from custom_components.eveus.const import (
     DOMAIN,
 )
 
+# The API generation is read off the payload: only V2 reports verFWWifi.
+_V2_PAYLOAD = {"state": 2, "verFWWifi": "1PGRW001A-R3.02.9"}
+_V1_PAYLOAD = {"state": 2}
 
-def _patch_status(monkeypatch, *, exc=None):
+
+def _patch_status(monkeypatch, *, exc=None, payload=None):
     async def _fake(self):
         if exc is not None:
             raise exc
-        return {"state": 2}
+        return dict(_V2_PAYLOAD if payload is None else payload)
 
     monkeypatch.setattr("custom_components.eveus.charger.v2.ChargerV2.get_status", _fake)
     monkeypatch.setattr("custom_components.eveus.charger.v1.ChargerV1.get_status", _fake)
@@ -78,6 +82,36 @@ async def test_user_cannot_connect(hass, monkeypatch):
     result = await hass.config_entries.flow.async_configure(result["flow_id"], _user_input())
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_user_v1_happy_path(hass, monkeypatch):
+    _patch_status(monkeypatch, payload=_V1_PAYLOAD)
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _user_input(model="v1")
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_MODEL] == "v1"
+
+
+async def test_user_v1_device_with_v2_selected(hass, monkeypatch):
+    _patch_status(monkeypatch, payload=_V1_PAYLOAD)
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _user_input(model="v2")
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "model_mismatch"}
+
+
+async def test_user_v2_device_with_v1_selected(hass, monkeypatch):
+    _patch_status(monkeypatch, payload=_V2_PAYLOAD)
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _user_input(model="v1")
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "model_mismatch"}
 
 
 async def test_user_prefix_taken(hass, monkeypatch):
@@ -135,6 +169,22 @@ async def test_reconfigure_duplicate_ip(hass, monkeypatch):
     )
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "already_configured"}
+
+
+async def test_reconfigure_model_mismatch(hass, monkeypatch):
+    _patch_status(monkeypatch, payload=_V2_PAYLOAD)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="1.2.3.4", data=_user_input())
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_IP_ADDRESS: "1.2.3.4", CONF_MODEL: "v1", CONF_USERNAME: "admin",
+         CONF_PASSWORD: "secret"},
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "model_mismatch"}
+    assert entry.data[CONF_MODEL] == "v2"   # unchanged
 
 
 # --------------------------------------------------------------------------- #
