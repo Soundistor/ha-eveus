@@ -60,17 +60,25 @@ class ChargerBinarySensor(EveusEntity, BinarySensorEntity):
         if self.coordinator.data:
             val = self.coordinator.data.get(self.entity_description.key)
             raw_on = val == _ACTIVE_VALUE[self.entity_description.key]
-            # Firmware faults bypass debounce — trigger immediately
-            state = self.coordinator.data.get("state", "")
-            substate = self.coordinator.data.get("subState", "")
-            is_firmware_fault = state in FIRMWARE_FAULT_STATES or substate in FIRMWARE_FAULT_STATES
-            if is_firmware_fault:
-                self._debounce_count = DEBOUNCE_THRESHOLD if raw_on else 0
-            elif raw_on:
-                self._debounce_count = min(self._debounce_count + 1, DEBOUNCE_THRESHOLD)
+            if self.entity_description.device_class is BinarySensorDeviceClass.SAFETY:
+                # Firmware faults bypass debounce — trigger immediately
+                state = self.coordinator.data.get("state", "")
+                substate = self.coordinator.data.get("subState", "")
+                is_firmware_fault = (
+                    state in FIRMWARE_FAULT_STATES or substate in FIRMWARE_FAULT_STATES
+                )
+                if is_firmware_fault:
+                    self._debounce_count = DEBOUNCE_THRESHOLD if raw_on else 0
+                elif raw_on:
+                    self._debounce_count = min(self._debounce_count + 1, DEBOUNCE_THRESHOLD)
+                else:
+                    self._debounce_count = 0
+                self._debounced_on = self._debounce_count >= DEBOUNCE_THRESHOLD
             else:
-                self._debounce_count = 0
-            self._debounced_on = self._debounce_count >= DEBOUNCE_THRESHOLD
+                # Not a safety signal (groundCtrl is a stored config flag): the
+                # station reports it as-is, debouncing only delays the reading
+                # by three polls.
+                self._debounced_on = raw_on
         super()._handle_coordinator_update()
 
     @property

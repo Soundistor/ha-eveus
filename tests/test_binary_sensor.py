@@ -6,8 +6,6 @@ On" display matched groundCtrl 0->1) and fixed in binary_sensor.py.
 """
 from __future__ import annotations
 
-import pytest
-
 from custom_components.eveus.binary_sensor import (
     BINARY_SENSORS,
     DEBOUNCE_THRESHOLD,
@@ -50,8 +48,9 @@ def _feed(sensor, key, on, *, state="charging", substate=""):
     sensor._handle_coordinator_update()
 
 
-@pytest.mark.parametrize("key", ["ground", "groundCtrl"])
-def test_debounce_requires_three_consecutive_on(key):
+def test_debounce_requires_three_consecutive_on():
+    """Only the SAFETY sensor is debounced."""
+    key = "ground"
     sensor = _make(key)
     _feed(sensor, key, True)
     assert sensor.is_on is False          # 1
@@ -62,8 +61,18 @@ def test_debounce_requires_three_consecutive_on(key):
     assert DEBOUNCE_THRESHOLD == 3
 
 
-@pytest.mark.parametrize("key", ["ground", "groundCtrl"])
-def test_single_off_resets_debounce(key):
+def test_config_flag_is_not_debounced():
+    """groundCtrl is stored configuration — it must follow the raw value at once."""
+    key = "groundCtrl"
+    sensor = _make(key)
+    _feed(sensor, key, True)
+    assert sensor.is_on is True
+    _feed(sensor, key, False)
+    assert sensor.is_on is False
+
+
+def test_single_off_resets_debounce():
+    key = "ground"
     sensor = _make(key)
     _feed(sensor, key, True)
     _feed(sensor, key, True)
