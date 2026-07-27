@@ -41,7 +41,13 @@ class ChargerCurrentNumber(EveusEntity, NumberEntity):
 
     @property
     def native_min_value(self) -> float:
-        return self._charger.min_current
+        # The station reports its own minimum; it changed 7 -> 6 on the same
+        # physical device after a firmware update. V1 does not send the field.
+        minimum = self.coordinator.data.get("minCurrent") if self.coordinator.data else None
+        try:
+            return float(minimum) if minimum else float(self._charger.min_current)
+        except (ValueError, TypeError):
+            return float(self._charger.min_current)
 
     @property
     def native_max_value(self) -> float:
