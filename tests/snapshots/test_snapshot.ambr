@@ -183,13 +183,6 @@
       'Voltage',
       False,
     ),
-    tuple(
-      'switch.eveus_1_2_3_4_charging',
-      'e_v1_charging',
-      'None',
-      'Charging',
-      False,
-    ),
   ])
 # ---
 # name: test_snapshot_v1[states]
@@ -571,17 +564,6 @@
       'last_reported': <ANY>,
       'last_updated': <ANY>,
       'state': '212',
-    }),
-    StateSnapshot({
-      'attributes': ReadOnlyDict({
-        'friendly_name': 'Eveus 1.2.3.4 Charging',
-      }),
-      'context': <ANY>,
-      'entity_id': 'switch.eveus_1_2_3_4_charging',
-      'last_changed': <ANY>,
-      'last_reported': <ANY>,
-      'last_updated': <ANY>,
-      'state': 'on',
     }),
   ])
 # ---

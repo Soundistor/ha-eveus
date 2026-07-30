@@ -107,8 +107,16 @@ async def test_request_shape() -> None:
     assert kwargs["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
 
 
+async def test_v1_has_no_charge_switch_capability() -> None:
+    """No switch entity is created for V1 — see switch.async_setup_entry."""
+    from charger.v2 import ChargerV2 as _V2
+
+    assert "charge_switch" not in ChargerV1("1.2.3.4").capabilities
+    assert "charge_switch" in _V2("1.2.3.4").capabilities
+
+
 async def test_v1_turn_off_raises_before_any_request() -> None:
-    """V1 has no stop command — fail loudly instead of reporting a false success."""
+    """Guard on the charger API itself, so no future caller can revive the no-op."""
     charger, session = _charger_v1("")
     with pytest.raises(HomeAssistantError) as err:
         await charger.set_enabled(False)

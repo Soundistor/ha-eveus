@@ -64,6 +64,8 @@ class ChargerV2(BaseCharger):
             "vBat", "RSSI",
             "IEM1", "IEM2",
             "sync_time",
+            # Charging can be started AND stopped over HTTP — V1 cannot stop.
+            "charge_switch",
         }
 
     def transform_data(self, raw: dict) -> dict:

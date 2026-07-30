@@ -17,6 +17,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     data = entry.runtime_data
+    # V1 has no remote stop at all (its own web UI has no such control, and a
+    # live `evseEnabled=0` mid-session is ignored), and its evseEnabled reads 1
+    # at all times — a toggle there would lie in both directions. Whether a
+    # session is running is answered by the state sensor.
+    if "charge_switch" not in data.charger.capabilities:
+        return
     prefix = data.prefix
     async_add_entities([ChargerSwitch(data.coordinator, data.charger, prefix, entry.entry_id)], True)
 
