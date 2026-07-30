@@ -34,6 +34,16 @@ def _patch_status(monkeypatch, *, exc=None, payload=None):
     monkeypatch.setattr("custom_components.eveus.charger.v2.ChargerV2.get_status", _fake)
     monkeypatch.setattr("custom_components.eveus.charger.v1.ChargerV1.get_status", _fake)
 
+    # A finished flow creates the entry, which HA then sets up — and setup asks
+    # V1 for its firmware version over HTTP (V1 reports none in /main). Stub it
+    # out: this file tests the flow, not that request.
+    async def _no_version(self):
+        return None
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v1.ChargerV1.async_load_sw_version", _no_version
+    )
+
 
 def _user_input(ip="1.2.3.4", model="v2", prefix=""):
     return {

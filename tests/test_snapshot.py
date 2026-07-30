@@ -46,6 +46,15 @@ async def _setup(hass, monkeypatch, model, raw, entry_id):
     monkeypatch.setattr("custom_components.eveus.charger.v1.ChargerV1.get_status", _fake)
     monkeypatch.setattr("custom_components.eveus.charger.v2.ChargerV2.get_status", _fake)
 
+    # V1 fetches its firmware version from the page the station serves; that
+    # HTTP call is not what these snapshots are about.
+    async def _version(self):
+        self.sw_version = "EnergyStar V5.23"
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v1.ChargerV1.async_load_sw_version", _version
+    )
+
     entry = MockConfigEntry(
         domain=DOMAIN,
         entry_id=entry_id,
