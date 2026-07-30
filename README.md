@@ -62,13 +62,16 @@ Several Home Assistant projects exist for Eveus chargers. This one focuses on:
 | Feature | v1 | v2 |
 |---------|----|----|
 | `evseEnabled` polarity | `1` = charging active | `0` = charging active |
-| State model | 22 states — errors and limits encoded in single `state` field | 8 top-level states in `state` + `subState` for limit / error detail |
+| State model | 14 states — errors encoded in the single `state` field (`0`, `6`, `9`, `12`–`22`) | 8 top-level states in `state` + `subState` for limit / error detail |
 | AI modes | Off, Voltage | Off, Voltage, Tesla (auto), Power |
 | `systemTime` format | `"HH:MM:SS"` string | Unix timestamp (integer) |
 | Measurement values | Raw integers — `curMeas1` and energy fields scaled ×0.1 | Real floats in native units |
 | `powerMeas` | Not in response — calculated from V × I | Reported directly by device |
 | Extra sensors | — | `subState`, `vBat`, `RSSI`, `IEM1`, `IEM2` |
-| Time sync | — | `sync_time` button (writes Unix timestamp to device) |
+| Stopping a session | Not possible over HTTP — no `charging` switch is created | `charging` switch stops and starts |
+| Firmware version | Read from the page the charger serves (no field in `/main`) | `verFWMain` in `/main` |
+| Write acknowledgement | None — empty body for both applied and rejected writes | Body `OK` on success |
+| Time sync | `sync_time` button (writes **local** wall-clock seconds) | `sync_time` button (writes Unix timestamp to device) |
 
 > **Full HTTP API reference.** The complete endpoint and field documentation —
 > all endpoints, the `/main` field reference, command list, enums, and an OpenAPI
@@ -127,6 +130,7 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | `temperature2` | °C | Sensor 2 |
 | `aistatus` | — | Active AI mode |
 | `aivoltage` | V | AI voltage setpoint |
+| `aimodecurrent` | A | Current the adaptive algorithm is allowing right now; empty while adaptive mode is off |
 | `curdesign` | A | Design max current |
 | `sessiontime` | s | Session duration (raw seconds) |
 | `session_time_daily` | h | Charging time since local midnight (resets daily, survives restart) |
@@ -153,13 +157,13 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 
 | Platform | Entity | Notes |
 |----------|--------|-------|
-| `switch` | `charging` | Start / stop charging |
+| `switch` | `charging` | Start / stop charging — **V2 only**, see the note below |
 | `number` | `current_set` | Charging current setpoint |
 | `select` | `ai_mode` | AI mode selector |
 | `binary_sensor` | `ground` | Ground connection OK |
 | `binary_sensor` | `groundctrl` | Ground protection active |
 | `button` | `force_refresh` | Force data update |
-| `button` | `sync_time` | Sync charger clock to HA time (V2 only) |
+| `button` | `sync_time` | Sync charger clock to HA time |
 
 ## Services
 
@@ -198,6 +202,8 @@ Standard HA diagnostics are supported: **Settings → Integrations → Eveus →
 - `ground` and `groundctrl` use debounce (3 consecutive polls) to suppress transient glitches; firmware fault states bypass debounce and trigger immediately.
 - `groundctrl` uses value `2` for active (not `1`) — handled correctly.
 - The charging switch updates optimistically in the UI; the next poll confirms the actual device state.
+- **V1 chargers get no charging switch.** That firmware has no remote-stop command at all — its own web interface has none either, and a stop written directly to the device is ignored. Whether a session is running is shown by the `state` sensor. Ending a session means unplugging the car or letting a limit expire.
+- After a write the charger keeps serving cached values for a few seconds, so the confirming poll is deliberately delayed rather than issued immediately.
 - If the charger's credentials change, HA shows the standard re-authentication prompt instead of a generic error.
 - All entity names are lowercase to match legacy YAML-based unique IDs and preserve automations.
 - The integration ships its own icon (`brand/`), shown automatically on Home Assistant 2026.3+ via the local brands proxy. On older versions the icon requires a submission to [home-assistant/brands](https://github.com/home-assistant/brands).
