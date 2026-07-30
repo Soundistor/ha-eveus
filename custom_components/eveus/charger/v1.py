@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
 
 from .base import AI_MODE_MAP, BaseCharger, blank_absent_temperature
 
@@ -50,6 +51,41 @@ class ChargerV1(BaseCharger):
             )
         await self._post_page_event("evseEnabled=1")
 
+    async def async_load_sw_version(self) -> None:
+        """V1 reports no version in /main — take it from the page footer.
+
+        The station serves its own UI at "/", whose footer reads e.g.
+        "EnergyStar V5.23". One GET at setup fills a device page that would
+        otherwise show no firmware at all.
+        """
+        try:
+            page = await self._request_text("GET", "/")
+        except Exception:  # a missing version must never break setup
+            return
+        match = re.search(r"EnergyStar\s*V[\d.]+", page)
+        if match:
+            self.sw_version = match.group(0)
+
+    async def sync_time(self) -> None:
+        """Set the station's clock to Home Assistant's local wall clock.
+
+        V1 stores exactly the epoch it is given and applies no offset when it
+        renders the clock: writing a UTC epoch made it display UTC, even though
+        its own `timeZone` field said 2 (measured 2026-07-30). So the number to
+        send is local wall-clock seconds — UTC epoch plus the local offset —
+        and the station's `timeZone` must not be trusted for this. Its own web
+        UI does the same arithmetic in the browser.
+        """
+        # Lazy import: see BaseCharger._get_session. dt_util.now() is HA's
+        # configured timezone, which is what the user sees in the UI — not the
+        # host's, which may differ.
+        from homeassistant.util import dt as dt_util
+
+        local = dt_util.now()
+        await self._post_page_event(
+            f"systemTime={int(local.timestamp() + local.utcoffset().total_seconds())}"
+        )
+
     def is_charging_active(self, enabled_value) -> bool:
         return enabled_value == 1
 
@@ -71,10 +107,11 @@ class ChargerV1(BaseCharger):
             "evseEnabled", "state", "currentSet", "curDesign",
             "curMeas1", "voltMeas1", "powerMeas",
             "temperature1", "temperature2",
-            "aiStatus", "aiVoltage",
+            "aiStatus", "aiVoltage", "aiModecurrent",
             "ground", "groundCtrl",
             "sessionTime", "sessionEnergy", "totalEnergy",
             "systemTime", "leakValue",
+            "sync_time",
         }
 
     def transform_data(self, raw: dict) -> dict:

@@ -195,3 +195,27 @@ async def test_every_write_path_validates_the_body() -> None:
         charger, _ = _charger("ILLEGAL_CMD")
         with pytest.raises(HomeAssistantError):
             await write(charger)
+
+
+async def test_v1_sync_time_writes_local_wall_clock(monkeypatch) -> None:
+    """V1 renders the epoch it is given as-is, so send local, not UTC.
+
+    Measured 2026-07-30: a UTC epoch made the station display UTC while its own
+    timeZone field said 2.
+    """
+    from datetime import UTC, datetime, timedelta, timezone
+
+    tz = timezone(timedelta(hours=3))
+    moment = datetime(2026, 7, 30, 18, 59, 39, tzinfo=tz)
+    monkeypatch.setattr("homeassistant.util.dt.now", lambda: moment)
+
+    charger, session = _charger_v1("")
+    await charger.sync_time()
+
+    sent = int(session.calls[0][2]["data"].split("=")[1])
+    # Reading the number back as a UTC wall clock must give the local time.
+    assert datetime.fromtimestamp(sent, tz=UTC).strftime("%H:%M:%S") == "18:59:39"
+
+
+async def test_v1_advertises_sync_time() -> None:
+    assert "sync_time" in ChargerV1("1.2.3.4").capabilities

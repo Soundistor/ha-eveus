@@ -102,3 +102,34 @@ def test_absent_temperature_sentinel():
 
 def test_temperature_missing_key_is_not_created():
     assert "temperature1" not in _charger().transform_data({"state": 1})
+
+
+def test_adaptive_current_is_hidden_while_adaptive_mode_is_off():
+    """aiModecurrent keeps a stale figure with the mode off — report nothing."""
+    from custom_components.eveus.sensor import (
+        _ADAPTIVE_CURRENT_DESCRIPTION,
+        AdaptiveCurrentSensor,
+    )
+
+    class _Coord:
+        def __init__(self, data):
+            self.data = data
+            self.last_update_success = True
+
+        def async_add_listener(self, update_callback, context=None):
+            return lambda: None
+
+    class _Ch:
+        ip = "1.2.3.4"
+        model_name = "V1"
+        sw_version = None
+
+    def _value(data):
+        sensor = AdaptiveCurrentSensor(
+            _Coord(data), _Ch(), _ADAPTIVE_CURRENT_DESCRIPTION, "smoke", "e1"
+        )
+        return sensor.native_value
+
+    assert _value({"aiStatus": "voltage", "aiModecurrent": 7}) == 7
+    assert _value({"aiStatus": "off", "aiModecurrent": 6}) is None
+    assert _value({"aiModecurrent": 6}) is None

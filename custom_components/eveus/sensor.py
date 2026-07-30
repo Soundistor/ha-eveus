@@ -173,6 +173,16 @@ _DAILY_SESSION_TIME_DESCRIPTION = SensorEntityDescription(
     icon="mdi:av-timer",
 )
 
+_ADAPTIVE_CURRENT_DESCRIPTION = SensorEntityDescription(
+    key="aiModecurrent",
+    name="aimodecurrent",
+    translation_key="ai_mode_current",
+    native_unit_of_measurement="A",
+    device_class=SensorDeviceClass.CURRENT,
+    state_class=SensorStateClass.MEASUREMENT,
+    icon="mdi:brain",
+)
+
 # No state_class: long-term statistics for clock drift are useless noise
 _TIME_DRIFT_DESCRIPTION = SensorEntityDescription(
     key="systemTime",
@@ -226,6 +236,8 @@ async def async_setup_entry(
         entities.append(DailyEnergySensor(coordinator, charger, prefix, entry.entry_id))
     if "sessionTime" in charger.capabilities:
         entities.append(DailySessionTimeSensor(coordinator, charger, prefix, entry.entry_id))
+    if "aiModecurrent" in charger.capabilities:
+        entities.append(AdaptiveCurrentSensor(coordinator, charger, _ADAPTIVE_CURRENT_DESCRIPTION, prefix, entry.entry_id))
     if "systemTime" in charger.capabilities:
         entities.append(TimeDriftSensor(coordinator, charger, _TIME_DRIFT_DESCRIPTION, prefix, entry.entry_id))
     if "sessionEnergy" in charger.capabilities:
@@ -244,6 +256,21 @@ class ChargerSensor(EveusEntity, SensorEntity):
 
     @property
     def native_value(self):
+        return self.coordinator.data.get(self.entity_description.key)
+
+
+class AdaptiveCurrentSensor(ChargerSensor):
+    """Current the adaptive algorithm is allowing right now.
+
+    Only meaningful while adaptive mode is on: with it off the station keeps
+    serving a stale figure (live data showed 6 A while the car drew 31 A), so
+    report nothing rather than a number that contradicts the real current.
+    """
+
+    @property
+    def native_value(self):
+        if self.coordinator.data.get("aiStatus") in (None, "off"):
+            return None
         return self.coordinator.data.get(self.entity_description.key)
 
 

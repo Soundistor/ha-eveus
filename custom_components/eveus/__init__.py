@@ -39,6 +39,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: EveusConfigEntry) -> boo
 
     coordinator = ChargerCoordinator(hass, charger, entry.entry_id, device_name)
     await coordinator.async_config_entry_first_refresh()
+    # Generations whose /main carries no firmware version fetch it separately;
+    # a no-op elsewhere, and never fatal.
+    await charger.async_load_sw_version()
 
     entry.runtime_data = EveusData(charger=charger, coordinator=coordinator, prefix=prefix)
 

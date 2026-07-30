@@ -122,6 +122,7 @@
         }
       },
       "ai_voltage": { "name": "Напряжение AI" },
+      "ai_mode_current": { "name": "Адаптивный ток" },
       "session_time": { "name": "Время сессии" },
       "session_energy": { "name": "Энергия сессии" },
       "total_energy": { "name": "Суммарная энергия" },

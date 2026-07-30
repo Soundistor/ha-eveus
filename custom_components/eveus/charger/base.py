@@ -45,6 +45,11 @@ class BaseCharger:
     # unstudied generation fails loudly instead of silently skipping the check.
     write_ack: str | None = _WRITE_OK
 
+    # Firmware version for generations that do not report one in /main; filled
+    # in at setup by async_load_sw_version(), left as None where /main carries
+    # it (V2's verFWMain).
+    sw_version: str | None = None
+
     def __init__(self, ip: str, username: str | None = None,
                  password: str | None = None, hass=None) -> None:
         self.ip = ip
@@ -103,6 +108,9 @@ class BaseCharger:
 
     async def get_status(self) -> dict:
         return await self._request("POST", "/main")
+
+    async def async_load_sw_version(self) -> None:
+        """Read the firmware version once at setup, where /main lacks one."""
 
     async def set_current(self, value: int) -> None:
         # The station range-checks nothing here: it truncates to a uint8_t and

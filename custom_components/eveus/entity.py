@@ -22,7 +22,11 @@ class EveusEntity(CoordinatorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         # The station sends verFWMain with a trailing space ("GRM070A-R3.05.4 ").
+        # V1 has no such field — it reports its version only in the web UI it
+        # serves, which the charger reads once at setup.
         version = self.coordinator.data.get("verFWMain") if self.coordinator.data else None
+        if not version:
+            version = self._charger.sw_version
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
             name=self._device_name,

@@ -122,6 +122,7 @@
         }
       },
       "ai_voltage": { "name": "AI Voltage" },
+      "ai_mode_current": { "name": "Adaptive Current" },
       "session_time": { "name": "Session Time" },
       "session_energy": { "name": "Session Energy" },
       "total_energy": { "name": "Total Energy" },

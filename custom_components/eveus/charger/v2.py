@@ -57,7 +57,7 @@ class ChargerV2(BaseCharger):
             "evseEnabled", "state", "subState", "currentSet", "curDesign",
             "curMeas1", "voltMeas1", "powerMeas",
             "temperature1", "temperature2",
-            "aiStatus", "aiVoltage",
+            "aiStatus", "aiVoltage", "aiModecurrent",
             "ground", "groundCtrl",
             "sessionTime", "sessionEnergy", "totalEnergy",
             "systemTime", "leakValue",

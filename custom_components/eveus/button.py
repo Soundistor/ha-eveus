@@ -1,4 +1,4 @@
-"""Кнопки: Force Refresh и Sync Time (V2 only)."""
+"""Кнопки: Force Refresh и Sync Time (обе модели, формат записи разный)."""
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription

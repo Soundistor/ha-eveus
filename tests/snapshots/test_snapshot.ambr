@@ -30,6 +30,13 @@
       False,
     ),
     tuple(
+      'button.eveus_1_2_3_4_sync_time',
+      'e_v1_sync_time',
+      'None',
+      'Sync Time',
+      False,
+    ),
+    tuple(
       'number.eveus_1_2_3_4_charging_current',
       'e_v1_current_set',
       'None',
@@ -41,6 +48,13 @@
       'e_v1_ai_mode',
       'None',
       'AI Mode',
+      False,
+    ),
+    tuple(
+      'sensor.eveus_1_2_3_4_adaptive_current',
+      'e_v1_aimodecurrent',
+      'None',
+      'Adaptive Current',
       False,
     ),
     tuple(
@@ -236,6 +250,18 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
+        'friendly_name': 'Eveus 1.2.3.4 Sync Time',
+        'icon': 'mdi:clock-check',
+      }),
+      'context': <ANY>,
+      'entity_id': 'button.eveus_1_2_3_4_sync_time',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
         'friendly_name': 'Eveus 1.2.3.4 Charging Current',
         'icon': 'mdi:current-ac',
         'max': 32.0,
@@ -266,6 +292,21 @@
       'last_reported': <ANY>,
       'last_updated': <ANY>,
       'state': 'off',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'device_class': 'current',
+        'friendly_name': 'Eveus 1.2.3.4 Adaptive Current',
+        'icon': 'mdi:brain',
+        'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'unit_of_measurement': 'A',
+      }),
+      'context': <ANY>,
+      'entity_id': 'sensor.eveus_1_2_3_4_adaptive_current',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': 'unknown',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
@@ -619,6 +660,13 @@
       False,
     ),
     tuple(
+      'sensor.eveus_1_2_3_4_adaptive_current',
+      'e_v2_aimodecurrent',
+      'None',
+      'Adaptive Current',
+      False,
+    ),
+    tuple(
       'sensor.eveus_1_2_3_4_ai_status',
       'e_v2_aistatus',
       'None',
@@ -897,6 +945,21 @@
       'last_reported': <ANY>,
       'last_updated': <ANY>,
       'state': 'power',
+    }),
+    StateSnapshot({
+      'attributes': ReadOnlyDict({
+        'device_class': 'current',
+        'friendly_name': 'Eveus 1.2.3.4 Adaptive Current',
+        'icon': 'mdi:brain',
+        'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
+        'unit_of_measurement': 'A',
+      }),
+      'context': <ANY>,
+      'entity_id': 'sensor.eveus_1_2_3_4_adaptive_current',
+      'last_changed': <ANY>,
+      'last_reported': <ANY>,
+      'last_updated': <ANY>,
+      'state': '28',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
