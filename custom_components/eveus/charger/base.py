@@ -13,6 +13,8 @@ _TIMEOUT = aiohttp.ClientTimeout(total=10)
 # aiMode — answers "OK". (Static firmware analysis had suggested
 # "mainPost successfully"; that did not match the live device and made every
 # accepted write look rejected — trust the live capture over the disassembly.)
+# V1 answers differently and cannot be checked this way at all — see
+# BaseCharger.write_ack.
 _WRITE_OK = "OK"
 
 AI_MODE_MAP = {0: "off", 1: "voltage", 2: "tesla_auto", 3: "power"}
@@ -37,6 +39,11 @@ class BaseCharger:
     создаёт и не закрывает. `hass` необязателен: юнит-тесты `transform_data`
     инстанцируют зарядку без него и не делают сетевых запросов.
     """
+
+    # Body a station returns when it applied a write, or None if this generation
+    # gives no acknowledgement at all. Defaults to the V2 contract so a new,
+    # unstudied generation fails loudly instead of silently skipping the check.
+    write_ack: str | None = _WRITE_OK
 
     def __init__(self, ip: str, username: str | None = None,
                  password: str | None = None, hass=None) -> None:
@@ -78,15 +85,16 @@ class BaseCharger:
     async def _post_page_event(self, data: str) -> None:
         """Write one parameter and verify the station accepted it.
 
-        /pageEvent never answers JSON: success is the plain text
-        "mainPost successfully", and a refusal is plain text too
-        (ILLEGAL_CMD, "Failed to post control value", "content too long") —
-        always with HTTP 200. So the body is the only signal we get.
+        /pageEvent never answers JSON: on V2 success is the plain text "OK" and
+        a refusal is plain text too (ILLEGAL_CMD, "Failed to post control
+        value", "content too long") — always with HTTP 200, so the body is the
+        only signal we get. Generations that give no such signal set
+        `write_ack = None` and are verified by HTTP status alone.
         """
         body = await self._request_text(
             "POST", "/pageEvent", data=data, headers=_FORM_HEADERS
         )
-        if body.strip() != _WRITE_OK:
+        if self.write_ack is not None and body.strip() != self.write_ack:
             # Lazy import: see _get_session.
             from homeassistant.exceptions import HomeAssistantError
             raise HomeAssistantError(

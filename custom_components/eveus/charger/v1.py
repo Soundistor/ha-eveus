@@ -20,6 +20,13 @@ V1_STATE_MAP = {
 class ChargerV1(BaseCharger):
     """API v1 – Eveus."""
 
+    # V1 answers every /pageEvent write with HTTP 200, Content-Type text/plain
+    # and an EMPTY body — identically for an applied write and for a parameter
+    # name that does not exist (measured on EnergyStar V5.23, 2026-07-30). There
+    # is no acknowledgement to check, so the HTTP status is all we have; the
+    # coordinator's next poll is what actually confirms the new value.
+    write_ack = None
+
     async def set_enabled(self, enabled: bool) -> None:
         await self._post_page_event(f"evseEnabled={1 if enabled else 0}")
 

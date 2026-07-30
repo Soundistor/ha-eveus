@@ -1,11 +1,18 @@
 """Write path: /pageEvent answers plain text, never JSON.
 
-Success is the body "OK" (confirmed live on firmware R3.05.4, 2026-07-27); a
-refusal is plain text too and still arrives with HTTP 200, so the body is the
-only thing that tells the two apart. Before this was fixed every write raised
-on resp.json() *after* the station had already applied the command.
+On V2 success is the body "OK" (confirmed live on firmware R3.05.4,
+2026-07-27); a refusal is plain text too and still arrives with HTTP 200, so
+the body is the only thing that tells the two apart. Before this was fixed
+every write raised on resp.json() *after* the station had already applied the
+command.
+
+V1 gives no such signal: measured on EnergyStar V5.23 (2026-07-30), an applied
+write and an unknown parameter name both answer HTTP 200 / text/plain / zero
+bytes. Checking the body there turned every successful V1 write into an error
+toast, so V1 sets `write_ack = None` and relies on the HTTP status.
 """
 
+from charger.v1 import ChargerV1
 from charger.v2 import ChargerV2
 from homeassistant.exceptions import HomeAssistantError
 import pytest
@@ -52,6 +59,13 @@ def _charger(body: str) -> tuple[ChargerV2, _FakeSession]:
     return charger, session
 
 
+def _charger_v1(body: str) -> tuple[ChargerV1, _FakeSession]:
+    charger = ChargerV1("1.2.3.4")
+    session = _FakeSession(body)
+    charger._session = session
+    return charger, session
+
+
 async def test_success_body_accepted() -> None:
     charger, _ = _charger("OK")
     await charger.set_current(16)
@@ -91,6 +105,33 @@ async def test_request_shape() -> None:
     assert url == "http://1.2.3.4/pageEvent"
     assert kwargs["data"] == "currentSet=16"
     assert kwargs["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
+
+
+async def test_v1_empty_body_is_not_a_refusal() -> None:
+    """V1's applied writes answer with an empty body — that must not raise."""
+    charger, session = _charger_v1("")
+    await charger.set_current(16)
+    assert session.calls, "the write must still be sent"
+
+
+async def test_v1_accepts_any_body_including_v2_ack() -> None:
+    charger, _ = _charger_v1("OK")
+    await charger.set_enabled(True)
+
+
+async def test_v2_empty_body_still_raises() -> None:
+    """The V1 relaxation must not weaken V2, where an empty body means failure."""
+    charger, _ = _charger("")
+    with pytest.raises(HomeAssistantError):
+        await charger.set_current(16)
+
+
+async def test_unstudied_generation_defaults_to_the_v2_contract() -> None:
+    """A new charger class inherits write_ack='OK' — fail loudly, not silently."""
+    from charger.base import BaseCharger
+
+    assert BaseCharger.write_ack == "OK"
+    assert ChargerV1.write_ack is None
 
 
 async def test_every_write_path_validates_the_body() -> None:
