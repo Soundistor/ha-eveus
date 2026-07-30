@@ -107,6 +107,42 @@ async def test_request_shape() -> None:
     assert kwargs["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
 
 
+async def test_v1_turn_off_raises_before_any_request() -> None:
+    """V1 has no stop command — fail loudly instead of reporting a false success."""
+    charger, session = _charger_v1("")
+    with pytest.raises(HomeAssistantError) as err:
+        await charger.set_enabled(False)
+    assert not session.calls, "nothing may be sent for an impossible command"
+    assert "1.2.3.4" in str(err.value)
+
+
+async def test_v1_turn_on_still_works() -> None:
+    charger, session = _charger_v1("")
+    await charger.set_enabled(True)
+    assert session.calls[0][2]["data"] == "evseEnabled=1"
+
+
+async def test_v2_turn_off_is_untouched() -> None:
+    charger, session = _charger("OK")
+    await charger.set_enabled(False)
+    assert session.calls, "V2 can be stopped remotely"
+
+
+@pytest.mark.parametrize("value", [-1, 256, 999])
+async def test_out_of_range_current_raises_and_sends_nothing(value: int) -> None:
+    """The station wraps to uint8_t instead of refusing — catch it client-side."""
+    charger, session = _charger("OK")
+    with pytest.raises(HomeAssistantError):
+        await charger.set_current(value)
+    assert not session.calls
+
+
+async def test_in_range_current_is_unchanged() -> None:
+    charger, session = _charger("OK")
+    await charger.set_current(12)
+    assert session.calls[0][2]["data"] == "currentSet=12"
+
+
 async def test_ai_mode_body_is_the_parameter_alone() -> None:
     """No `pageevent=` prefix: the station matches names in the body itself."""
     charger, session = _charger("OK")

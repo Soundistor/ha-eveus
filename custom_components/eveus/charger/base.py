@@ -105,6 +105,17 @@ class BaseCharger:
         return await self._request("POST", "/main")
 
     async def set_current(self, value: int) -> None:
+        # The station range-checks nothing here: it truncates to a uint8_t and
+        # keeps the result, so currentSet=999 was stored as 231 (999 & 0xFF) in
+        # a live test. The `number` entity's min/max already guards its own
+        # path; this catches the standalone service, which bypasses it.
+        if not 0 <= value <= 255:
+            # Lazy import: see _get_session.
+            from homeassistant.exceptions import HomeAssistantError
+            raise HomeAssistantError(
+                f"Current {value} A is outside 0..255 — the charger would "
+                "silently wrap it to a different value."
+            )
         await self._post_page_event(f"currentSet={value:02d}")
 
     async def set_ai_mode(self, mode: int) -> None:

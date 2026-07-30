@@ -30,7 +30,25 @@ class ChargerV1(BaseCharger):
     write_ack = None
 
     async def set_enabled(self, enabled: bool) -> None:
-        await self._post_page_event(f"evseEnabled={1 if enabled else 0}")
+        """Start charging. V1 cannot be stopped remotely — say so, don't pretend.
+
+        Sending `evseEnabled=0` mid-session was tested live (2026-07-30, raw
+        curl, bypassing the integration): the station keeps charging and keeps
+        reporting evseEnabled=1. Its own web UI never sends that write on its
+        own either — it only appears when the user hands control to the
+        schedule, so stopping is schedule-driven in this firmware, not a flag.
+        Since V1 acknowledges nothing (see write_ack), posting it anyway would
+        report success for something that did not happen.
+        """
+        if not enabled:
+            # Lazy import: see BaseCharger._get_session.
+            from homeassistant.exceptions import HomeAssistantError
+            raise HomeAssistantError(
+                f"Charger {self.ip} (V1) cannot stop charging remotely: this "
+                "firmware has no stop command. End the session by unplugging "
+                "the car, or let a time/energy limit expire."
+            )
+        await self._post_page_event("evseEnabled=1")
 
     def is_charging_active(self, enabled_value) -> bool:
         return enabled_value == 1
