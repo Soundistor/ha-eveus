@@ -9,9 +9,10 @@ from typing import Any
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -51,6 +52,13 @@ UNREACHABLE_ERRORS = (aiohttp.ClientConnectionError, asyncio.TimeoutError)
 # brief network hiccup is still reported.
 STALE_STATE_AFTER = timedelta(minutes=15)
 
+# /main serves cached values, and a write needs a couple of poll cycles before
+# it shows up there: the station's own web client discards exactly the next 2
+# responses after every write (3 after a current change), globally rather than
+# per field. Refreshing the instant a write returns therefore reads the OLD
+# value back and undoes what the user just did on screen. Wait this long first.
+WRITE_SETTLE = timedelta(seconds=3)
+
 # Firmware-level faults that bypass safety debounce in binary sensors
 FIRMWARE_FAULT_STATES = frozenset({
     "cpu_error", "relay_stuck",          # V1 main state
@@ -83,6 +91,19 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._live_energy = None
         self._live_time = None
         self.last_session = None
+
+    @callback
+    def schedule_refresh_after_write(self) -> None:
+        """Refresh once the station has had time to apply a write.
+
+        Deliberately not an immediate `async_request_refresh()` — see
+        WRITE_SETTLE. Scheduled rather than awaited so the user's action
+        returns at once instead of blocking on the settle time.
+        """
+        async_call_later(self.hass, WRITE_SETTLE.total_seconds(), self._refresh_now)
+
+    async def _refresh_now(self, _now) -> None:
+        await self.async_request_refresh()
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:

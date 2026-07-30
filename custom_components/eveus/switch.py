@@ -49,13 +49,13 @@ class ChargerSwitch(EveusEntity, SwitchEntity):
         await self._charger.set_enabled(True)
         self._optimistic = True
         self.async_write_ha_state()
-        await self.coordinator.async_request_refresh()
+        self.coordinator.schedule_refresh_after_write()
 
     async def async_turn_off(self, **kwargs):
         await self._charger.set_enabled(False)
         self._optimistic = False
         self.async_write_ha_state()
-        await self.coordinator.async_request_refresh()
+        self.coordinator.schedule_refresh_after_write()
 
     @callback
     def _handle_coordinator_update(self) -> None:

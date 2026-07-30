@@ -52,4 +52,4 @@ class ChargerAIModeSelect(EveusEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         mode = self._charger.ai_modes[option]
         await self._charger.set_ai_mode(mode)
-        await self.coordinator.async_request_refresh()
+        self.coordinator.schedule_refresh_after_write()

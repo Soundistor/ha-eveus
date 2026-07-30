@@ -54,4 +54,4 @@ class ChargerButton(EveusEntity, ButtonEntity):
             await self.coordinator.async_request_refresh()
         elif self.entity_description.key == "sync_time":
             await self._charger.sync_time()
-            await self.coordinator.async_request_refresh()
+            self.coordinator.schedule_refresh_after_write()

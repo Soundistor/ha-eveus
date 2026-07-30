@@ -68,4 +68,4 @@ class ChargerCurrentNumber(EveusEntity, NumberEntity):
 
     async def async_set_value(self, value: float) -> None:
         await self._charger.set_current(int(value))
-        await self.coordinator.async_request_refresh()
+        self.coordinator.schedule_refresh_after_write()
