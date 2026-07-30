@@ -4,16 +4,18 @@ from datetime import datetime
 
 from .base import AI_MODE_MAP, BaseCharger, blank_absent_temperature
 
+# The station's own enum, read off the web UI it serves (EnergyStar V5.23) and
+# confirmed live on 2026-07-30: unplugged reads 12, a plugged car that is not
+# charging reads 9. The map this replaced came from the project ha-eveus was
+# forked from, whose config was taken from a V2-generation station — it agreed
+# with V1 only on 0 and 6, so a plugged car showed "No Ground" and an unplugged
+# one "Overcurrent". Codes 1..5, 7, 8, 10 and 11 do not exist on V1.
 V1_STATE_MAP = {
-    0: "no_data",      1: "ready",                  2: "waiting",
-    3: "charging",     4: "charging",               5: "charging",
-    6: "charging",     7: "current_leak",            8: "cpu_error",
-    9: "no_ground",   10: "overheat_plug",          11: "overheat_relay",
-    12: "overcurrent", 13: "overvoltage",            14: "undervoltage",
-    15: "limited_by_time",    16: "limited_by_energy",
-    17: "limited_by_money",   18: "limited_by_schedule1",
-    19: "limited_by_schedule2", 20: "disabled_by_user",
-    21: "relay_stuck",           22: "limited_by_ai_mode",
+    0: "no_data",        6: "charging",       9: "waiting",
+    12: "ready",        13: "delayed_start", 14: "overcurrent",
+    15: "overvoltage",  16: "current_leak",  17: "station_error",
+    18: "overheat",     19: "locked",        20: "no_ground",
+    21: "overheat_plug", 22: "undervoltage",
 }
 
 

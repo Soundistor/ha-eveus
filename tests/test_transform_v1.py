@@ -27,13 +27,39 @@ def test_scaling_and_power():
 
 
 def test_state_mapping():
+    """The station's own enum — every code it can report.
+
+    Measured live on EnergyStar V5.23 (2026-07-30): unplugged -> 12, a plugged
+    car that is not charging -> 9.
+    """
     charger = _charger()
-    for num, expected in ((3, "charging"), (4, "charging"), (5, "charging"),
-                          (6, "charging"), (8, "cpu_error"), (21, "relay_stuck")):
+    for num, expected in (
+        (0, "no_data"), (6, "charging"), (9, "waiting"), (12, "ready"),
+        (13, "delayed_start"), (14, "overcurrent"), (15, "overvoltage"),
+        (16, "current_leak"), (17, "station_error"), (18, "overheat"),
+        (19, "locked"), (20, "no_ground"), (21, "overheat_plug"),
+        (22, "undervoltage"),
+    ):
         assert charger.transform_data({"state": num})["state"] == expected
     assert charger.transform_data({"state": 99})["state"] == "unknown"
     # Missing state defaults to 0 -> no_data
     assert charger.transform_data({})["state"] == "no_data"
+
+
+def test_measured_states_are_not_faults():
+    """The two states the old map turned into invented faults."""
+    charger = _charger()
+    # plugged in, not charging — used to read "no_ground"
+    assert charger.transform_data({"state": 9})["state"] == "waiting"
+    # unplugged — used to read "overcurrent"
+    assert charger.transform_data({"state": 12})["state"] == "ready"
+
+
+def test_codes_absent_from_the_station_enum_are_unknown():
+    """1..5, 7, 8, 10, 11 do not exist on V1 — never guess a meaning for them."""
+    charger = _charger()
+    for num in (1, 2, 3, 4, 5, 7, 8, 10, 11):
+        assert charger.transform_data({"state": num})["state"] == "unknown"
 
 
 def test_ai_status_mapping():
