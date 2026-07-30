@@ -108,7 +108,12 @@ class BaseCharger:
         await self._post_page_event(f"currentSet={value:02d}")
 
     async def set_ai_mode(self, mode: int) -> None:
-        await self._post_page_event(f"pageevent=evseEnabled&aiMode={mode}")
+        # The station matches parameter names in the request body, so the write
+        # is `aiMode` alone — same as the vendor's own web UI sends. The former
+        # `pageevent=evseEnabled&` prefix was junk: no parameter of that name
+        # exists, and the value it carried was the literal string "evseEnabled".
+        # Read side stays `aiStatus`; that asymmetry is the station's, not ours.
+        await self._post_page_event(f"aiMode={mode}")
 
     async def set_enabled(self, enabled: bool) -> None:
         raise NotImplementedError

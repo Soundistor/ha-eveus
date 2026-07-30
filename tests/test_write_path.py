@@ -107,6 +107,13 @@ async def test_request_shape() -> None:
     assert kwargs["headers"]["Content-Type"] == "application/x-www-form-urlencoded"
 
 
+async def test_ai_mode_body_is_the_parameter_alone() -> None:
+    """No `pageevent=` prefix: the station matches names in the body itself."""
+    charger, session = _charger("OK")
+    await charger.set_ai_mode(3)
+    assert session.calls[0][2]["data"] == "aiMode=3"
+
+
 async def test_v1_empty_body_is_not_a_refusal() -> None:
     """V1's applied writes answer with an empty body — that must not raise."""
     charger, session = _charger_v1("")
