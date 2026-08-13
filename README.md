@@ -198,13 +198,14 @@ Standard HA diagnostics are supported: **Settings → Integrations → Eveus →
 ## Notes
 
 - Polling interval is dynamic: 30 s while charging, 60 s otherwise.
-- When the charger is powered off or unplugged, its entities simply become **unavailable** — this is normal and does **not** raise a repair issue. A repair issue is only created when the charger is reachable but returns an error (e.g. wrong credentials, or the configured API version not matching the firmware).
+- When the charger is powered off or unplugged, its entities simply become **unavailable** — this is normal and does **not** raise a repair issue. A repair issue is only created when the charger is reachable but returns an error (e.g. a malformed response, or the configured API version not matching the firmware).
+- **A charger that is offline when Home Assistant starts does not block setup.** The integration loads anyway, its entities appear as unavailable, and they come back on the first successful poll — within about a minute of the charger rejoining the network. Daily counters keep their value across such a restart instead of starting the day again from zero.
 - `ground` and `groundctrl` use debounce (3 consecutive polls) to suppress transient glitches; firmware fault states bypass debounce and trigger immediately.
 - `groundctrl` uses value `2` for active (not `1`) — handled correctly.
 - The charging switch updates optimistically in the UI; the next poll confirms the actual device state.
 - **V1 chargers get no charging switch.** That firmware has no remote-stop command at all — its own web interface has none either, and a stop written directly to the device is ignored. Whether a session is running is shown by the `state` sensor. Ending a session means unplugging the car or letting a limit expire.
 - After a write the charger keeps serving cached values for a few seconds, so the confirming poll is deliberately delayed rather than issued immediately.
-- If the charger's credentials change, HA shows the standard re-authentication prompt instead of a generic error.
+- Credentials are validated when you add or reconfigure the charger. On V2 this needs a separate request: the `/main` endpoint the integration polls answers successfully whatever the password is, so a wrong password cannot be detected on the polling path at all — only when adding or reconfiguring. V1 credentials are not verified by the integration.
 - All entity names are lowercase to match legacy YAML-based unique IDs and preserve automations.
 - The integration ships its own icon (`brand/`), shown automatically on Home Assistant 2026.3+ via the local brands proxy. On older versions the icon requires a submission to [home-assistant/brands](https://github.com/home-assistant/brands).
 
