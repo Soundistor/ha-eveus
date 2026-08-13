@@ -12,6 +12,9 @@ from custom_components.eveus.binary_sensor import (
     ChargerBinarySensor,
     EveusConnectivitySensor,
 )
+from custom_components.eveus.charger.v1 import V1_STATE_MAP
+from custom_components.eveus.charger.v2 import V2_STATE_MAP, V2_SUBSTATE_ERROR_MAP
+from custom_components.eveus.coordinator import FIRMWARE_FAULT_STATES
 
 _DESC = {d.key: d for d in BINARY_SENSORS}
 _ACTIVE = {"ground": 0, "groundCtrl": 1}   # raw value that means "on" per key
@@ -87,8 +90,33 @@ def test_single_off_resets_debounce():
 
 def test_firmware_fault_bypasses_debounce_via_state():
     sensor = _make("ground")
-    _feed(sensor, "ground", True, state="cpu_error")   # firmware fault
+    _feed(sensor, "ground", True, state="no_ground")   # V1 firmware fault
     assert sensor.is_on is True                        # immediate, no 3-in-a-row
+
+
+def test_grounding_error_bypasses_debounce():
+    """The very fault the ground sensor represents used to be the slowest.
+
+    grounding_error was missing from FIRMWARE_FAULT_STATES, so a ground fault
+    took the full debounce — up to 3 polls, i.e. ~3 minutes.
+    """
+    sensor = _make("ground")
+    _feed(sensor, "ground", True, state="error", substate="grounding_error")
+    assert sensor.is_on is True
+
+
+def test_fault_states_all_come_from_a_state_map():
+    """Every member must be a value some map actually produces.
+
+    cpu_error and relay_stuck sat in the set while no map emitted them — dead
+    entries that read as coverage.
+    """
+    produced = (
+        set(V1_STATE_MAP.values())
+        | set(V2_STATE_MAP.values())
+        | set(V2_SUBSTATE_ERROR_MAP.values())
+    )
+    assert produced >= FIRMWARE_FAULT_STATES
 
 
 def test_firmware_fault_bypasses_debounce_via_substate():
@@ -103,7 +131,7 @@ def test_firmware_fault_off_clears_immediately():
     _feed(sensor, "ground", True)
     _feed(sensor, "ground", True)
     assert sensor.is_on is True
-    _feed(sensor, "ground", False, state="cpu_error")  # fault + raw off -> count 0
+    _feed(sensor, "ground", False, state="no_ground")  # fault + raw off -> count 0
     assert sensor.is_on is False
 
 

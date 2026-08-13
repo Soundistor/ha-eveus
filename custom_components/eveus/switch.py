@@ -31,10 +31,18 @@ class ChargerSwitch(EveusEntity, SwitchEntity):
 
     _attr_translation_key = "charging"
 
+    # The station discards the next 2-3 responses after any write and keeps
+    # serving the old value (KB-01; measured live). At a 30-60s interval that is
+    # minutes, so dropping the optimistic state on the first poll that follows
+    # made the toggle spring back. Hold it until the poll agrees — bounded, so a
+    # write the station simply ignored still loses to reality.
+    _OPTIMISTIC_MAX_POLLS = 3
+
     def __init__(self, coordinator, charger, prefix: str, entry_id: str):
         super().__init__(coordinator, charger, prefix, entry_id, "charging")
-        # Optimistic state shown until the next coordinator poll confirms it
+        # Optimistic state shown until a coordinator poll confirms it
         self._optimistic: bool | None = None
+        self._optimistic_polls = 0
 
     @property
     def is_on(self) -> bool:
@@ -49,17 +57,27 @@ class ChargerSwitch(EveusEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs):
         await self._charger.set_enabled(True)
-        self._optimistic = True
-        self.async_write_ha_state()
+        self._set_optimistic(True)
         self.coordinator.schedule_refresh_after_write()
 
     async def async_turn_off(self, **kwargs):
         await self._charger.set_enabled(False)
-        self._optimistic = False
-        self.async_write_ha_state()
+        self._set_optimistic(False)
         self.coordinator.schedule_refresh_after_write()
+
+    def _set_optimistic(self, value: bool) -> None:
+        self._optimistic = value
+        self._optimistic_polls = 0
+        self.async_write_ha_state()
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        self._optimistic = None
+        if self._optimistic is not None:
+            enabled = self.coordinator.data.get("evseEnabled") if self.coordinator.data else None
+            polled = (
+                self._charger.is_charging_active(enabled) if enabled is not None else None
+            )
+            self._optimistic_polls += 1
+            if polled == self._optimistic or self._optimistic_polls >= self._OPTIMISTIC_MAX_POLLS:
+                self._optimistic = None
         super()._handle_coordinator_update()

@@ -49,6 +49,17 @@ class ChargerButton(EveusEntity, ButtonEntity):
         super().__init__(coordinator, charger, prefix, entry_id, description.name)
         self.entity_description = description
 
+    @property
+    def available(self) -> bool:
+        # force_refresh only asks the coordinator to poll now, which is exactly
+        # what you want while the charger is unreachable — so it must not go
+        # unavailable with it. sync_time does write to the station, so there the
+        # inherited availability is correct. Keyed off the description rather
+        # than overridden for the whole class, which serves both buttons.
+        if self.entity_description.key == "force_refresh":
+            return True
+        return super().available
+
     async def async_press(self) -> None:
         if self.entity_description.key == "force_refresh":
             await self.coordinator.async_request_refresh()

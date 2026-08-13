@@ -56,16 +56,50 @@ async def test_entry_loads_while_charger_is_unreachable(hass, unreachable):
     )
 
 
+# Entities that do not read the station and so must survive it being offline:
+# the three daily/last-session accumulators serve their own stored values, and
+# force_refresh only asks the coordinator to poll now — the one action that is
+# useful precisely while the charger is unreachable. Connectivity reports the
+# offline state itself.
+_SURVIVES_OFFLINE = (
+    "connectivity",
+    "daily_energy",
+    "daily_session_time",
+    "last_session_energy",
+    "last_session_duration",
+    "force_refresh",
+)
+
+
 async def test_entities_exist_and_are_unavailable(hass, unreachable):
     await _setup(hass)
 
     states = hass.states.async_all()
     assert states, "entities must register even without poll data"
-    # Connectivity reports the offline state itself, so it stays available.
     values = {
-        s.entity_id: s.state for s in states if not s.entity_id.endswith("connectivity")
+        s.entity_id: s.state
+        for s in states
+        if not s.entity_id.endswith(_SURVIVES_OFFLINE)
     }
+    assert values, "the station-reading entities must still be in the sample"
     assert set(values.values()) == {STATE_UNAVAILABLE}, values
+
+
+async def test_own_value_entities_stay_available_offline(hass, unreachable):
+    """Going unavailable with the station wipes the entity's attributes.
+
+    That is what made persisting the daily values separately necessary; these
+    entities never needed the station in the first place.
+    """
+    await _setup(hass)
+
+    survivors = {
+        s.entity_id: s.state
+        for s in hass.states.async_all()
+        if s.entity_id.endswith(_SURVIVES_OFFLINE)
+    }
+    assert len(survivors) == len(_SURVIVES_OFFLINE), survivors
+    assert STATE_UNAVAILABLE not in survivors.values(), survivors
 
 
 async def test_no_repair_issue_for_an_unreachable_charger(hass, unreachable):
@@ -115,3 +149,45 @@ async def test_reading_every_entity_survives_missing_data(hass, unreachable):
     assert states
     for state in states:
         assert state.state != "unavailable" or state.entity_id.endswith("connectivity")
+
+
+async def test_daily_energy_survives_an_offline_unload_setup_cycle(hass, unreachable, monkeypatch):
+    """The seam between the two offline fixes, through the real platform path.
+
+    Both halves were only ever tested in isolation: this file never built a
+    DailyEnergySensor, and test_daily_sensors.py drives one over a hand-rolled
+    stub coordinator instead of hass.config_entries. What is proven here is that
+    the sensor reaches async_added_to_hass at all when the entry loads with an
+    unreachable station, and that a real unload/setup cycle carries its stored
+    day across.
+    """
+    entry = await _setup(hass)
+    entity_id = "sensor.offline_daily_energy"
+
+    # One good frame so there is a day to lose, then back offline.
+    async def _ok(self):
+        return {"state": 2, "totalEnergy": 100.0, "verFWWifi": "1PGRW001A-R3.02.9"}
+
+    monkeypatch.setattr("custom_components.eveus.charger.v2.ChargerV2.get_status", _ok)
+    await entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    async def _ok_more(self):
+        return {"state": 2, "totalEnergy": 105.5, "verFWWifi": "1PGRW001A-R3.02.9"}
+
+    monkeypatch.setattr("custom_components.eveus.charger.v2.ChargerV2.get_status", _ok_more)
+    await entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "5.5"
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    # A single frame after the restart: the day must continue from the restored
+    # baseline, not start over from this reading.
+    await entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "5.5"

@@ -20,7 +20,11 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 import custom_components.eveus.sensor as sensor_mod
-from custom_components.eveus.sensor import DailyEnergySensor, DailySessionTimeSensor
+from custom_components.eveus.sensor import (
+    DailyEnergySensor,
+    DailySessionTimeSensor,
+    LastSessionSensor,
+)
 
 _DAY = datetime(2026, 7, 1, 12, 0, 0, tzinfo=dt_util.DEFAULT_TIME_ZONE)
 _NEXT_DAY = _DAY + timedelta(days=1)
@@ -84,6 +88,68 @@ def test_daily_energy_midnight_rollover(clock):
     assert sensor.native_value == 0.0
     assert sensor._current_date == _NEXT_DAY.date()
     assert sensor._attr_last_reset is not None
+
+
+def test_daily_energy_recovers_when_the_day_turned_over_without_a_total(clock):
+    """A None at rollover used to kill the sensor until the next midnight.
+
+    Only the rollover branch ever set a baseline, so once it was fixed as None
+    no later poll of that day could bring it back.
+    """
+    sensor, coord = _make(DailyEnergySensor)
+    _update(sensor, coord)                       # no totalEnergy key at all
+    assert sensor.native_value is None
+    assert sensor._baseline is None
+
+    _update(sensor, coord, totalEnergy=100.0)    # picks the baseline up
+    _update(sensor, coord, totalEnergy=105.5)
+    assert sensor.native_value == 5.5
+
+
+def test_daily_energy_survives_a_lifetime_counter_reset(clock):
+    """IEM2 is byte-for-byte totalEnergy and the user can zero it (KB-03 BUG-7).
+
+    Clamping the negative delta to 0 froze the sensor until midnight even while
+    the car was charging.
+    """
+    sensor, coord = _make(DailyEnergySensor)
+    _update(sensor, coord, totalEnergy=100.0)
+    _update(sensor, coord, totalEnergy=105.0)
+    assert sensor.native_value == 5.0
+    last_reset = sensor._attr_last_reset
+
+    _update(sensor, coord, totalEnergy=3.0)      # reset in the station's web UI
+    assert sensor.native_value == 5.0, "the day accumulated so far must survive"
+    _update(sensor, coord, totalEnergy=8.0)
+    assert sensor.native_value == 10.0
+    assert sensor._attr_last_reset == last_reset, "a counter reset is not a new day"
+
+
+async def test_daily_energy_keeps_the_day_across_a_reset_and_restart(hass, clock):
+    """The rebase must not need a field that is never persisted.
+
+    Storing the pre-reset total in a new attribute would have had to reach
+    extra_restore_state_data too — the accumulated value already lives in
+    `computed`, so subtracting it is what makes a restart safe.
+    """
+    sensor, coord = _make(DailyEnergySensor)
+    _update(sensor, coord, totalEnergy=100.0)
+    _update(sensor, coord, totalEnergy=105.0)
+    _update(sensor, coord, totalEnergy=3.0)      # reset
+    _update(sensor, coord, totalEnergy=8.0)
+    assert sensor.native_value == 10.0
+    stored = sensor.extra_restore_state_data.as_dict()
+
+    restarted, coord2 = _make(DailyEnergySensor)
+    restarted.hass = hass
+    restarted.entity_id = "sensor.eveus_daily_energy"
+    mock_restore_cache_with_extra_data(
+        hass, ((State(restarted.entity_id, STATE_UNAVAILABLE), stored),)
+    )
+    await restarted.async_added_to_hass()
+
+    _update(restarted, coord2, totalEnergy=9.0)
+    assert restarted.native_value == 11.0
 
 
 async def test_daily_energy_restore_same_day(hass, clock, monkeypatch):
@@ -244,6 +310,69 @@ async def test_daily_session_time_survives_a_corrupted_payload(hass, clock, payl
 
     assert sensor._accumulated == 0.0
     assert sensor.native_value == 0.0
+
+
+def _last_session(field="energy_kwh"):
+    coord = _Coord()
+    coord.last_session = None
+    description = (
+        sensor_mod._LAST_SESSION_ENERGY_DESCRIPTION
+        if field == "energy_kwh"
+        else sensor_mod._LAST_SESSION_DURATION_DESCRIPTION
+    )
+    entity = LastSessionSensor(coord, _Charger(), description, "smoke", "e1", field)
+    entity.async_write_ha_state = lambda: None
+    return entity, coord
+
+
+async def test_last_session_survives_unavailable_shutdown(hass, clock):
+    """The snapshot of a finished session must outlive an offline restart.
+
+    It was left on async_get_last_state(), which returns "unavailable" whenever
+    HA shut down while the charger was offline — the normal case for this device
+    since setup stopped waiting for a poll. coordinator.last_session is None
+    after a restart too, so there was nothing to recover from.
+    """
+    sensor, _ = _last_session()
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_last_session_energy"
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, STATE_UNAVAILABLE), {"computed": 12.5}),),
+    )
+
+    await sensor.async_added_to_hass()
+
+    assert sensor.native_value == 12.5
+
+
+async def test_last_session_migrates_from_the_old_state_only_path(hass, clock, monkeypatch):
+    """Installs upgrading from the state-only scheme have no payload yet."""
+    sensor, _ = _last_session()
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_last_session_energy"
+    monkeypatch.setattr(
+        sensor, "async_get_last_state",
+        AsyncMock(return_value=State(sensor.entity_id, "7.25")),
+    )
+
+    await sensor.async_added_to_hass()
+
+    assert sensor.native_value == 7.25
+
+
+async def test_last_session_ignores_a_corrupted_payload(hass, clock):
+    sensor, _ = _last_session()
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_last_session_energy"
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, STATE_UNAVAILABLE), {"computed": "unknown"}),),
+    )
+
+    await sensor.async_added_to_hass()
+
+    assert sensor.native_value is None
 
 
 async def test_daily_energy_migrates_from_legacy_attributes(hass, clock, monkeypatch):

@@ -38,6 +38,11 @@ class FakeCharger:
         self._exc: BaseException | None = None
         self.capabilities: set = set()
         self.sw_version_loads = 0
+        self.sw_version: str | None = None
+        # Mirrors ChargerV1: the real one swallows its own error and returns, so
+        # a failed read is indistinguishable from a successful one except that
+        # sw_version stays None.
+        self.sw_version_found = "EnergyStar V5.23"
 
     def set_data(self, data: dict) -> None:
         self._data = data
@@ -53,6 +58,7 @@ class FakeCharger:
 
     async def async_load_sw_version(self) -> None:
         self.sw_version_loads += 1
+        self.sw_version = self.sw_version_found
 
     def transform_data(self, raw):
         return raw
@@ -267,3 +273,42 @@ async def test_sw_version_is_fetched_once_after_the_first_good_poll(hass):
 
     await _poll_ok(coord, state="charging")
     assert charger.sw_version_loads == 1, "once per entry, not once per poll"
+
+
+async def test_sw_version_is_retried_when_the_first_read_finds_nothing(hass):
+    """A failed read must not count as done.
+
+    ChargerV1.async_load_sw_version swallows its own error and returns, so
+    flagging "loaded" on the mere absence of an exception left sw_version None
+    until the next reload — and the read fails exactly when it is most likely
+    to: the station has only just come back up.
+    """
+    coord = _make_coordinator(hass)
+    charger = coord.charger
+    charger.sw_version_found = None          # the GET failed inside the charger
+
+    await _poll_ok(coord, state="standby")
+    assert charger.sw_version_loads == 1
+    assert charger.sw_version is None
+
+    charger.sw_version_found = "EnergyStar V5.23"   # station is up now
+    await _poll_ok(coord, state="standby")
+    assert charger.sw_version == "EnergyStar V5.23"
+
+    await _poll_ok(coord, state="charging")
+    assert charger.sw_version_loads == 2, "stops once it actually has a version"
+
+
+async def test_sw_version_retries_are_bounded(hass):
+    """A generation that never reports a version must not be asked forever.
+
+    This is a GET with a 10s timeout sitting inside the poll loop.
+    """
+    coord = _make_coordinator(hass)
+    charger = coord.charger
+    charger.sw_version_found = None
+
+    for _ in range(6):
+        await _poll_ok(coord, state="standby")
+
+    assert charger.sw_version_loads == 3

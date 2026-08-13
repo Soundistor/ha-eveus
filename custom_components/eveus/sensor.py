@@ -401,6 +401,14 @@ class DailyEnergySensor(ChargerSensor, RestoreEntity):
         return self._computed
 
     @property
+    def available(self) -> bool:
+        # Serves its own accumulator, not a station reading. The charger being
+        # offline is this device's normal state, and going unavailable there
+        # wipes the entity's attributes — which is what made persisting the
+        # values separately necessary in the first place.
+        return True
+
+    @property
     def extra_state_attributes(self):
         return {
             "date": self._current_date.isoformat() if self._current_date else None,
@@ -445,8 +453,23 @@ class DailyEnergySensor(ChargerSensor, RestoreEntity):
             self._baseline = total
             self._current_date = today
             self._attr_last_reset = dt_util.start_of_local_day()
+        # Rebase, keeping whatever the day has already accumulated. Two ways in,
+        # one repair:
+        #   * baseline is None — the day turned over on a frame without
+        #     totalEnergy, or None came back from storage. Without this the day
+        #     stayed dead until midnight, because only the rollover branch above
+        #     ever set a baseline.
+        #   * total < baseline — the user pressed reset in the station's web UI.
+        #     IEM2 is byte-for-byte totalEnergy and rstEM2 zeroes the lifetime
+        #     total (KB-03 BUG-7, §4 W-6), so this is a reachable state, not an
+        #     anomaly. Clamping it to 0 hid it and froze the sensor until
+        #     midnight.
+        # Subtracting _computed is what keeps the accumulated day: it is already
+        # persisted, so no new field has to be stored.
+        if total is not None and (self._baseline is None or total < self._baseline):
+            self._baseline = total - (self._computed or 0.0)
         if total is not None and self._baseline is not None:
-            self._computed = max(0.0, round(total - self._baseline, 3))
+            self._computed = round(total - self._baseline, 3)
         super()._handle_coordinator_update()
 
 
@@ -463,6 +486,11 @@ class DailySessionTimeSensor(ChargerSensor, RestoreEntity):
     @property
     def native_value(self):
         return round(self._accumulated / 3600, 3)
+
+    @property
+    def available(self) -> bool:
+        # Own accumulator — see DailyEnergySensor.available.
+        return True
 
     @property
     def extra_state_attributes(self):
@@ -538,14 +566,27 @@ class LastSessionSensor(ChargerSensor, RestoreEntity):
         self._field = field
         self._value = None
 
+    @property
+    def available(self) -> bool:
+        # Its own frozen snapshot, not a station reading: an offline charger has
+        # nothing to say about the session that already finished.
+        return True
+
+    @property
+    def extra_restore_state_data(self) -> _StoredValues:
+        # The key is "computed" so _restored_values' one-time migration from
+        # state attributes lands on it for free.
+        return _StoredValues({"computed": self._value})
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state and last_state.state not in (None, "unknown", "unavailable"):
-            try:  # noqa: SIM105  explicit try/except reads clearer than contextlib.suppress
-                self._value = float(last_state.state)
-            except (ValueError, TypeError):
-                pass
+        values = await _restored_values(self)
+        if values is None:
+            return
+        try:  # noqa: SIM105  explicit try/except reads clearer than contextlib.suppress
+            self._value = float(values.get("computed"))
+        except (ValueError, TypeError):
+            pass
 
     @property
     def native_value(self):

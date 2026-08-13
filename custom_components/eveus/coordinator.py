@@ -58,11 +58,22 @@ STALE_STATE_AFTER = timedelta(minutes=15)
 # value back and undoes what the user just did on screen. Wait this long first.
 WRITE_SETTLE = timedelta(seconds=3)
 
-# Firmware-level faults that bypass safety debounce in binary sensors
+# How many polls may try to fetch the firmware version before giving up until
+# the next reload. V2 reports it in /main and never gets here; V1 needs a GET
+# that can fail exactly when the station has only just come back up.
+_SW_VERSION_MAX_ATTEMPTS = 3
+
+# Firmware-level faults that bypass safety debounce in binary sensors. Every
+# member must be a value some state map actually produces — see
+# test_fault_states_all_come_from_a_state_map. cpu_error and relay_stuck used to
+# sit here and no map ever emitted them.
 FIRMWARE_FAULT_STATES = frozenset({
-    "cpu_error", "relay_stuck",          # V1 main state
-    "relay_error", "software_failure",   # V2 subState
-    "pilot_error", "gfci_test_failure",  # V2 subState
+    "no_ground",                          # V1 main state
+    "relay_error", "software_failure",    # V2 subState
+    "pilot_error", "gfci_test_failure",   # V2 subState
+    "grounding_error",                    # V2 subState — the fault the ground
+                                          # binary sensor represents, so it must
+                                          # not be the slowest one to confirm
 })
 
 
@@ -88,6 +99,7 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._prev_state = None
         self._last_success = None
         self._sw_version_loaded = False
+        self._sw_version_attempts = 0
         self._live_energy = None
         self._live_time = None
         self.last_session = None
@@ -176,8 +188,19 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         if self._sw_version_loaded:
             return
-        self._sw_version_loaded = True
         await self.charger.async_load_sw_version()
+        # The flag turns on the RESULT, not on "no exception was raised":
+        # ChargerV1.async_load_sw_version swallows its own error and returns, so
+        # a failed first attempt looks identical to a successful one from here.
+        # Retry on later polls instead, bounded — this is a GET with a 10s
+        # timeout inside the poll loop, and a generation that reports no version
+        # at all must not be asked forever.
+        if self.charger.sw_version is not None:
+            self._sw_version_loaded = True
+            return
+        self._sw_version_attempts += 1
+        if self._sw_version_attempts >= _SW_VERSION_MAX_ATTEMPTS:
+            self._sw_version_loaded = True
 
     def _process_session_events(self, data) -> None:
         new_state = data.get("state")
