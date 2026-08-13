@@ -46,6 +46,8 @@ class ChargerAIModeSelect(EveusEntity, SelectEntity):
         # transform_data already mapped aiStatus to a key like "off", "voltage".
         # Guard against values outside this model's options (e.g. "tesla_auto"
         # reported by V1 firmware, or "unknown").
+        if not self.coordinator.data:
+            return None
         value = self.coordinator.data.get("aiStatus")
         return value if value in self.options else None
 

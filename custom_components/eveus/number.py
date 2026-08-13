@@ -64,6 +64,8 @@ class ChargerCurrentNumber(EveusEntity, NumberEntity):
 
     @property
     def native_value(self) -> float | None:
+        if not self.coordinator.data:
+            return None
         return self.coordinator.data.get("currentSet")
 
     async def async_set_native_value(self, value: float) -> None:

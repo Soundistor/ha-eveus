@@ -40,6 +40,8 @@ class ChargerSwitch(EveusEntity, SwitchEntity):
     def is_on(self) -> bool:
         if self._optimistic is not None:
             return self._optimistic
+        if not self.coordinator.data:
+            return False
         enabled = self.coordinator.data.get("evseEnabled")
         if enabled is None:
             return False

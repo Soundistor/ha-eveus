@@ -38,6 +38,7 @@ class FakeCharger:
         self._data: dict = {}
         self._exc: BaseException | None = None
         self.capabilities: set = set()
+        self.sw_version_loads = 0
 
     def set_data(self, data: dict) -> None:
         self._data = data
@@ -50,6 +51,9 @@ class FakeCharger:
         if self._exc is not None:
             raise self._exc
         return dict(self._data)
+
+    async def async_load_sw_version(self) -> None:
+        self.sw_version_loads += 1
 
     def transform_data(self, raw):
         return raw
@@ -235,3 +239,25 @@ async def test_aware_system_time_passes_through(hass):
     aware = dt_util.utcnow().replace(microsecond=0)
     data = await _poll_ok(coord, state="standby", systemTime=aware)
     assert data["systemTime"] == aware
+
+
+async def test_sw_version_is_fetched_once_after_the_first_good_poll(hass):
+    """Setup no longer waits for the charger, so this moved into the poll.
+
+    Generations whose /main carries no firmware version read it from the page
+    the station serves. Doing that at setup would burn its timeout while the
+    station is offline and never retry once the entry had loaded.
+    """
+    coord = _make_coordinator(hass)
+    charger = coord.charger
+
+    charger.set_exc(aiohttp.ClientConnectionError("offline"))
+    with pytest.raises(UpdateFailed):
+        await coord._async_update_data()
+    assert charger.sw_version_loads == 0, "nothing to read while the station is down"
+
+    await _poll_ok(coord, state="standby")
+    assert charger.sw_version_loads == 1
+
+    await _poll_ok(coord, state="charging")
+    assert charger.sw_version_loads == 1, "once per entry, not once per poll"

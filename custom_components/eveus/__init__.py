@@ -38,10 +38,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: EveusConfigEntry) -> boo
     device_name = friendly_device_name(prefix, ip)
 
     coordinator = ChargerCoordinator(hass, charger, entry.entry_id, device_name)
-    await coordinator.async_config_entry_first_refresh()
-    # Generations whose /main carries no firmware version fetch it separately;
-    # a no-op elsewhere, and never fatal.
-    await charger.async_load_sw_version()
+    # Deliberately NOT async_config_entry_first_refresh(): an unreachable charger
+    # must not block setup. This device is offline most of the time (it comes up
+    # for a charging session), so gating the entry on the first poll meant almost
+    # every HA restart left it in SETUP_RETRY — no entities at all — and recovery
+    # was up to 10 minutes away (the core's retry backoff doubles to a 600 s
+    # ceiling; measured on prod 2026-08-13). Loading regardless costs nothing: the
+    # entity set comes from charger.capabilities, not from poll data, so entities
+    # register as unavailable and the normal 60 s poll picks the station up.
+    # Awaited on purpose — a fire-and-forget refresh would let entities register
+    # while last_update_success is still True and data is None.
+    await coordinator.async_refresh()
 
     entry.runtime_data = EveusData(charger=charger, coordinator=coordinator, prefix=prefix)
 

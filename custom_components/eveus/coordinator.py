@@ -88,6 +88,7 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._device_name = device_name
         self._prev_state = None
         self._last_success = None
+        self._sw_version_loaded = False
         self._live_energy = None
         self._live_time = None
         self.last_session = None
@@ -134,6 +135,7 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # transition that happened while offline.
                 self._prev_state = None
             self._last_success = now
+            await self._load_sw_version_once()
             self._process_session_events(data)
             return data
         except UNREACHABLE_ERRORS as exc:
@@ -168,6 +170,20 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 translation_placeholders={"device_name": self._device_name},
             )
             raise UpdateFailed(f"Error updating: {exc}") from exc
+
+    async def _load_sw_version_once(self) -> None:
+        """Fetch the firmware version on the first successful poll.
+
+        Generations whose /main carries no version read it from the page the
+        station serves (V1); a no-op elsewhere, and never fatal. This runs here
+        rather than at setup because setup no longer waits for the charger to be
+        reachable — at setup the request would only burn its timeout while the
+        station is offline, and would never be retried once the entry loaded.
+        """
+        if self._sw_version_loaded:
+            return
+        self._sw_version_loaded = True
+        await self.charger.async_load_sw_version()
 
     def _process_session_events(self, data) -> None:
         new_state = data.get("state")

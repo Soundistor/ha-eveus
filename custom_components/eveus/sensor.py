@@ -258,6 +258,10 @@ class ChargerSensor(EveusEntity, SensorEntity):
 
     @property
     def native_value(self):
+        # `data` is None until the first successful poll — setup no longer waits
+        # for one, so this is reachable while the charger is unreachable.
+        if not self.coordinator.data:
+            return None
         return self.coordinator.data.get(self.entity_description.key)
 
 
@@ -271,6 +275,8 @@ class AdaptiveCurrentSensor(ChargerSensor):
 
     @property
     def native_value(self):
+        if not self.coordinator.data:
+            return None
         if self.coordinator.data.get("aiStatus") in (None, "off"):
             return None
         return self.coordinator.data.get(self.entity_description.key)
@@ -286,6 +292,8 @@ class TimeDriftSensor(ChargerSensor):
 
     @property
     def native_value(self):
+        if not self.coordinator.data:
+            return None
         dev = self.coordinator.data.get("systemTime")
         if dev is None:
             return None
