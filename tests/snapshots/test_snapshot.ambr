@@ -1,4 +1,21 @@
 # serializer version: 1
+# name: test_snapshot_v1[device]
+  list([
+    tuple(
+      list([
+        tuple(
+          'eveus',
+          'e_v1',
+        ),
+      ]),
+      'Eveus 1.2.3.4',
+      'Eveus',
+      'V1',
+      'EnergyStar V5.23',
+      'http://1.2.3.4',
+    ),
+  ])
+# ---
 # name: test_snapshot_v1[registry]
   list([
     tuple(
@@ -121,10 +138,10 @@
       False,
     ),
     tuple(
-      'sensor.eveus_1_2_3_4_leak_current',
+      'sensor.eveus_1_2_3_4_leak_channel_raw',
       'e_v1_leakvalue',
       'diagnostic',
-      'Leak Current',
+      'Leak channel (raw)',
       False,
     ),
     tuple(
@@ -447,12 +464,10 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
-        'friendly_name': 'Eveus 1.2.3.4 Leak Current',
-        'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
-        'unit_of_measurement': 'mA',
+        'friendly_name': 'Eveus 1.2.3.4 Leak channel (raw)',
       }),
       'context': <ANY>,
-      'entity_id': 'sensor.eveus_1_2_3_4_leak_current',
+      'entity_id': 'sensor.eveus_1_2_3_4_leak_channel_raw',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -608,6 +623,23 @@
     }),
   ])
 # ---
+# name: test_snapshot_v2[device]
+  list([
+    tuple(
+      list([
+        tuple(
+          'eveus',
+          'e_v2',
+        ),
+      ]),
+      'Eveus 1.2.3.4',
+      'Eveus',
+      'V2',
+      'GRM070A-R3.02.9',
+      'http://1.2.3.4',
+    ),
+  ])
+# ---
 # name: test_snapshot_v2[registry]
   list([
     tuple(
@@ -751,10 +783,10 @@
       False,
     ),
     tuple(
-      'sensor.eveus_1_2_3_4_leak_current',
+      'sensor.eveus_1_2_3_4_leak_channel_raw',
       'e_v2_leakvalue',
       'diagnostic',
-      'Leak Current',
+      'Leak channel (raw)',
       False,
     ),
     tuple(
@@ -1142,12 +1174,10 @@
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
-        'friendly_name': 'Eveus 1.2.3.4 Leak Current',
-        'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
-        'unit_of_measurement': 'mA',
+        'friendly_name': 'Eveus 1.2.3.4 Leak channel (raw)',
       }),
       'context': <ANY>,
-      'entity_id': 'sensor.eveus_1_2_3_4_leak_current',
+      'entity_id': 'sensor.eveus_1_2_3_4_leak_channel_raw',
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
@@ -1313,7 +1343,7 @@
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
-      'state': '-48805240',
+      'state': '-48891640',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({

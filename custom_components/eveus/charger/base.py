@@ -144,6 +144,18 @@ class BaseCharger:
         # `pageevent=evseEnabled&` prefix was junk: no parameter of that name
         # exists, and the value it carried was the literal string "evseEnabled".
         # Read side stays `aiStatus`; that asymmetry is the station's, not ours.
+        #
+        # Same guard as set_current, for the same reason: the `select` entity's
+        # options already bound this on its own path, so what is left is a direct
+        # call from pyscript or custom code. V1 knows two modes, V2 four — the
+        # valid set is the generation's, not the shared map's.
+        if mode not in self.ai_modes.values():
+            # Lazy import: see _get_session.
+            from homeassistant.exceptions import HomeAssistantError
+            raise HomeAssistantError(
+                f"AI mode {mode} is not one of {sorted(self.ai_modes.values())} "
+                f"on {self.model_name}."
+            )
         await self._post_page_event(f"aiMode={mode}")
 
     async def set_enabled(self, enabled: bool) -> None:
@@ -165,4 +177,15 @@ class BaseCharger:
 
     @property
     def ai_modes(self) -> dict:
+        raise NotImplementedError
+
+    @property
+    def capabilities(self) -> set:
+        # Read without a guard by switch.py and button.py, so a generation that
+        # forgets it fails at setup with AttributeError instead of saying what
+        # is missing. sync_time is declared alongside for a complete contract —
+        # it is only ever called when "sync_time" is in capabilities.
+        raise NotImplementedError
+
+    async def sync_time(self) -> None:
         raise NotImplementedError

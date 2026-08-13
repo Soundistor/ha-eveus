@@ -128,7 +128,7 @@
       "total_energy": { "name": "Total Energy" },
       "system_time": { "name": "System Time" },
       "time_drift": { "name": "Time Drift" },
-      "leak_value": { "name": "Leak Current" },
+      "leak_value": { "name": "Leak channel (raw)" },
       "sub_state": {
         "name": "Sub-state",
         "state": {

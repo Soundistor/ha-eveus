@@ -213,6 +213,39 @@ async def test_daily_session_time_survives_unavailable_shutdown(hass, clock):
     assert sensor._prev == 3700.0
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"accumulated_s": "unknown", "prev_s": 3700.0},
+        {"accumulated_s": 3600.0, "prev_s": "unknown"},
+        {"accumulated_s": None, "prev_s": None},
+    ],
+)
+async def test_daily_session_time_survives_a_corrupted_payload(hass, clock, payload):
+    """A bad stored value must not keep the entity from being added.
+
+    DailyEnergySensor already guards the same conversion; this one raised
+    ValueError/TypeError straight out of async_added_to_hass.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_daily_session_time"
+    mock_restore_cache_with_extra_data(
+        hass,
+        (
+            (
+                State(sensor.entity_id, STATE_UNAVAILABLE),
+                {"date": _DAY.date().isoformat(), **payload},
+            ),
+        ),
+    )
+
+    await sensor.async_added_to_hass()
+
+    assert sensor._accumulated == 0.0
+    assert sensor.native_value == 0.0
+
+
 async def test_daily_energy_migrates_from_legacy_attributes(hass, clock, monkeypatch):
     """No install has a payload until it shuts down once on this version.
 

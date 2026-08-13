@@ -17,7 +17,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .charger.v1 import V1_STATE_MAP
+from .charger.v1 import V1_STATE_MAP, ChargerV1
 from .charger.v2 import (
     AI_MODE_MAP,
     V2_STATE_MAP,
@@ -111,8 +111,13 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         entity_registry_enabled_default=False,
     ),
     SensorEntityDescription(
+        # No unit and no state_class on purpose: the scale is unconfirmed. The
+        # value is the raw /debug.clh channel, unscaled, and the firmware's own
+        # trip thresholds (800/420) live on that same raw scale — 37 mA of leak
+        # would have tripped any RCD. The vendor UI labels it mA; nothing else
+        # does. Long-term statistics over a channel of unknown scale would only
+        # give the guess an air of authority.
         key="leakValue", name="leakvalue", translation_key="leak_value",
-        native_unit_of_measurement="mA", state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
@@ -298,11 +303,15 @@ class TimeDriftSensor(ChargerSensor):
         if dev is None:
             return None
         drift = round((dev - dt_util.utcnow()).total_seconds())
-        # V1 sends only HH:MM:SS glued to today's date — wrap around midnight
-        if drift > 43200:
-            drift -= 86400
-        elif drift < -43200:
-            drift += 86400
+        # V1 sends only HH:MM:SS glued to today's date, so a clock that reads a
+        # few minutes before midnight looks a day off — wrap it. V2 sends an
+        # absolute timestamp, where wrapping would fold a genuine >12h drift
+        # into a small plausible number and hide exactly the case worth seeing.
+        if isinstance(self._charger, ChargerV1):
+            if drift > 43200:
+                drift -= 86400
+            elif drift < -43200:
+                drift += 86400
         # Anti-flicker: in-sync clocks read exactly 0, real drift in 10s steps
         if abs(drift) < 30:
             return 0
@@ -485,10 +494,18 @@ class DailySessionTimeSensor(ChargerSensor, RestoreEntity):
             return
         if stored_date != today:
             return
-        self._current_date = stored_date
-        self._accumulated = float(values.get("accumulated_s", 0.0))
         prev = values.get("prev_s")
-        self._prev = float(prev) if prev is not None else None
+        # Same guard as DailyEnergySensor: a corrupted payload must not keep the
+        # entity from being added. Both values are converted before anything is
+        # assigned, so a bad one cannot leave the sensor half-restored.
+        try:
+            accumulated = float(values.get("accumulated_s", 0.0))
+            previous = float(prev) if prev is not None else None
+        except (ValueError, TypeError):
+            return
+        self._current_date = stored_date
+        self._accumulated = accumulated
+        self._prev = previous
         self._attr_last_reset = dt_util.start_of_local_day()
 
     @callback

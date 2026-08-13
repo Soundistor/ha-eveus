@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.syrupy import HomeAssistantSnapshotExtension
@@ -86,6 +86,21 @@ async def _assert_snapshot(hass, entry, snapshot):
         for e in entries
     )
     assert registry == snapshot(name="registry")
+    # The device is snapshotted too: a drift in identifiers duplicates the device
+    # in the registry, and nothing else covers the device level.
+    devices = sorted(
+        (
+            sorted(d.identifiers),
+            d.name,
+            d.manufacturer,
+            d.model,
+            d.sw_version,
+            d.configuration_url,
+        )
+        for d in dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    )
+    assert len(devices) == 1, "the config entry must own exactly one device"
+    assert devices == snapshot(name="device")
     states = sorted(hass.states.async_all(), key=lambda s: s.entity_id)
     assert states == snapshot(name="states")
 

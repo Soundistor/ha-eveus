@@ -2,7 +2,14 @@
 
 from datetime import UTC, datetime
 
-from charger.v2 import ChargerV2
+from charger.v2 import (
+    AI_MODE_MAP,
+    V2_STATE_MAP,
+    V2_SUBSTATE_ERROR_MAP,
+    V2_SUBSTATE_LIMIT_MAP,
+    ChargerV2,
+)
+import pytest
 
 
 def _charger() -> ChargerV2:
@@ -16,16 +23,41 @@ def test_state_mapping():
     assert charger.transform_data({"state": 99})["state"] == "unknown"
 
 
-def test_substate_uses_error_map_in_error_state():
-    out = _charger().transform_data({"state": 7, "subState": 3})
+@pytest.mark.parametrize("code", sorted(V2_SUBSTATE_ERROR_MAP))
+def test_substate_uses_error_map_in_error_state(code):
+    out = _charger().transform_data({"state": 7, "subState": code})
     assert out["state"] == "error"
-    assert out["subState"] == "relay_error"
+    assert out["subState"] == V2_SUBSTATE_ERROR_MAP[code]
 
 
-def test_substate_uses_limit_map_otherwise():
-    out = _charger().transform_data({"state": 4, "subState": 3})
+@pytest.mark.parametrize("code", sorted(V2_SUBSTATE_LIMIT_MAP))
+def test_substate_uses_limit_map_otherwise(code):
+    out = _charger().transform_data({"state": 4, "subState": code})
     assert out["state"] == "charging"
-    assert out["subState"] == "time_limit"
+    assert out["subState"] == V2_SUBSTATE_LIMIT_MAP[code]
+
+
+@pytest.mark.parametrize("code", sorted(V2_STATE_MAP))
+def test_every_state_code_maps(code):
+    assert _charger().transform_data({"state": code})["state"] == V2_STATE_MAP[code]
+
+
+@pytest.mark.parametrize("code", sorted(AI_MODE_MAP))
+def test_every_ai_status_code_maps(code):
+    assert _charger().transform_data({"aiStatus": code})["aiStatus"] == AI_MODE_MAP[code]
+
+
+def test_contract_codes_are_pinned():
+    """Literal values for the codes that carry an outside contract.
+
+    The parametrized tests above read the same map the code does, so they prove
+    the transform path but cannot catch two values being swapped inside a map.
+    These can. Deliberately not the whole map: a literal copy of all 34 entries
+    would have to be edited on every legitimate addition.
+    """
+    assert V2_SUBSTATE_LIMIT_MAP[9] == "external_limit"
+    assert V2_SUBSTATE_ERROR_MAP[3] == "relay_error"
+    assert V2_STATE_MAP[4] == "charging"
 
 
 def test_substate_missing_and_unknown():

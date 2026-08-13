@@ -158,6 +158,27 @@ async def test_ai_mode_body_is_the_parameter_alone() -> None:
     assert session.calls[0][2]["data"] == "aiMode=3"
 
 
+async def test_v1_rejects_a_mode_it_does_not_have() -> None:
+    """V1 knows two AI modes; the shared map has four.
+
+    The select entity's options already bound this on its own path, so the hole
+    was a direct call from pyscript or custom code — the same class of hole
+    set_current's range check closes.
+    """
+    charger, session = _charger_v1("")
+    with pytest.raises(HomeAssistantError) as err:
+        await charger.set_ai_mode(2)          # tesla_auto: V2 only
+    assert not session.calls, "nothing may be sent for an unsupported mode"
+    assert "V1" in str(err.value)
+
+
+async def test_v2_accepts_all_four_ai_modes() -> None:
+    for mode in ChargerV2("1.2.3.4").ai_modes.values():
+        charger, session = _charger("OK")
+        await charger.set_ai_mode(mode)
+        assert session.calls[0][2]["data"] == f"aiMode={mode}"
+
+
 async def test_v1_empty_body_is_not_a_refusal() -> None:
     """V1's applied writes answer with an empty body — that must not raise."""
     charger, session = _charger_v1("")

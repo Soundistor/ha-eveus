@@ -128,7 +128,7 @@
       "total_energy": { "name": "Суммарная энергия" },
       "system_time": { "name": "Системное время" },
       "time_drift": { "name": "Дрейф часов" },
-      "leak_value": { "name": "Ток утечки" },
+      "leak_value": { "name": "Канал утечки (сырое значение)" },
       "sub_state": {
         "name": "Подсостояние",
         "state": {

@@ -69,6 +69,5 @@ async def test_config_entry_setup_creates_entities(hass, _mock_get_status):
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    assert entry.state is not None
     states = hass.states.async_all()
     assert states, "expected at least one entity state after setup"

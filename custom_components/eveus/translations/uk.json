@@ -128,7 +128,7 @@
       "total_energy": { "name": "Загальна енергія" },
       "system_time": { "name": "Системний час" },
       "time_drift": { "name": "Дрейф годинника" },
-      "leak_value": { "name": "Струм витоку" },
+      "leak_value": { "name": "Канал витоку (сире значення)" },
       "sub_state": {
         "name": "Підстан",
         "state": {
