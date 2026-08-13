@@ -66,6 +66,6 @@ class ChargerCurrentNumber(EveusEntity, NumberEntity):
     def native_value(self) -> float | None:
         return self.coordinator.data.get("currentSet")
 
-    async def async_set_value(self, value: float) -> None:
+    async def async_set_native_value(self, value: float) -> None:
         await self._charger.set_current(int(value))
         self.coordinator.schedule_refresh_after_write()

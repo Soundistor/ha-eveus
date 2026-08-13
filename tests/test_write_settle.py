@@ -48,7 +48,7 @@ async def _number(hass, monkeypatch):
 async def test_refresh_is_deferred_until_the_station_settles(hass, monkeypatch):
     number, charger, refreshes = await _number(hass, monkeypatch)
 
-    await number.async_set_value(16)
+    await number.async_set_native_value(16)
     await hass.async_block_till_done()
 
     assert charger.written == [16], "the write itself must be immediate"
