@@ -1,7 +1,9 @@
 """Сенсоры зарядки."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -12,7 +14,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .charger.v1 import V1_STATE_MAP
@@ -299,6 +301,42 @@ class TimeDriftSensor(ChargerSensor):
         return round(drift / 10.0) * 10
 
 
+@dataclass
+class _StoredValues(ExtraStoredData):
+    """Values a sensor persists for itself, independently of its state.
+
+    Restoring from state attributes alone loses everything whenever the entity
+    was `unavailable` when HA shut down: HA writes no extra_state_attributes for
+    an unavailable entity, and the charger is offline most of the time. This
+    payload is read off the entity object instead, so availability can't erase
+    it.
+    """
+
+    values: dict[str, Any]
+
+    def as_dict(self) -> dict[str, Any]:
+        return self.values
+
+
+async def _restored_values(entity: RestoreEntity) -> dict[str, Any] | None:
+    """Values persisted by `entity`, or None if there is nothing to restore.
+
+    Reads the entity's own payload first. Falling back to the state's
+    attributes is a ONE-TIME migration for installs upgrading from the
+    attribute-only scheme: no install has a payload until it shuts down once on
+    this version, so without the fallback every user would lose their baseline
+    exactly once. It must stay a fallback — the attributes are the lossy path.
+    """
+    stored = await entity.async_get_last_extra_data()
+    if stored is not None:
+        return stored.as_dict()
+    last_state = await entity.async_get_last_state()
+    if last_state is None:
+        return None
+    # `computed` mirrors the extra-data key name so callers read one shape.
+    return {**last_state.attributes, "computed": last_state.state}
+
+
 class SessionEnergySensor(ChargerSensor, RestoreEntity):
     """Session energy sensor with last_reset support for correct HA statistics."""
 
@@ -307,11 +345,18 @@ class SessionEnergySensor(ChargerSensor, RestoreEntity):
         self._attr_last_reset = None
         self._prev_energy: float | None = None
 
+    @property
+    def extra_restore_state_data(self) -> _StoredValues:
+        last_reset = self._attr_last_reset
+        return _StoredValues(
+            {"last_reset": last_reset.isoformat() if last_reset else None}
+        )
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is not None:
-            stored = last_state.attributes.get("last_reset")
+        values = await _restored_values(self)
+        if values is not None:
+            stored = values.get("last_reset")
             if stored:
                 self._attr_last_reset = dt_util.parse_datetime(stored)
 
@@ -345,22 +390,32 @@ class DailyEnergySensor(ChargerSensor, RestoreEntity):
             "baseline_kwh": self._baseline,
         }
 
+    @property
+    def extra_restore_state_data(self) -> _StoredValues:
+        return _StoredValues(
+            {
+                "date": self._current_date.isoformat() if self._current_date else None,
+                "baseline_kwh": self._baseline,
+                "computed": self._computed,
+            }
+        )
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is None:
+        values = await _restored_values(self)
+        if values is None:
             return
         today = dt_util.now().date()
         try:
-            stored_date = date.fromisoformat(last_state.attributes.get("date", ""))
+            stored_date = date.fromisoformat(values.get("date", ""))
         except (ValueError, TypeError):
             return
         if stored_date != today:
             return
         self._current_date = stored_date
-        self._baseline = last_state.attributes.get("baseline_kwh")
+        self._baseline = values.get("baseline_kwh")
         try:  # noqa: SIM105  explicit try/except reads clearer than contextlib.suppress
-            self._computed = float(last_state.state)
+            self._computed = float(values.get("computed"))
         except (ValueError, TypeError):
             pass
         self._attr_last_reset = dt_util.start_of_local_day()
@@ -400,21 +455,31 @@ class DailySessionTimeSensor(ChargerSensor, RestoreEntity):
             "prev_s": self._prev,
         }
 
+    @property
+    def extra_restore_state_data(self) -> _StoredValues:
+        return _StoredValues(
+            {
+                "date": self._current_date.isoformat() if self._current_date else None,
+                "accumulated_s": self._accumulated,
+                "prev_s": self._prev,
+            }
+        )
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if last_state is None:
+        values = await _restored_values(self)
+        if values is None:
             return
         today = dt_util.now().date()
         try:
-            stored_date = date.fromisoformat(last_state.attributes.get("date", ""))
+            stored_date = date.fromisoformat(values.get("date", ""))
         except (ValueError, TypeError):
             return
         if stored_date != today:
             return
         self._current_date = stored_date
-        self._accumulated = float(last_state.attributes.get("accumulated_s", 0.0))
-        prev = last_state.attributes.get("prev_s")
+        self._accumulated = float(values.get("accumulated_s", 0.0))
+        prev = values.get("prev_s")
         self._prev = float(prev) if prev is not None else None
         self._attr_last_reset = dt_util.start_of_local_day()
 
