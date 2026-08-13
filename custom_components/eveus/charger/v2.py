@@ -32,6 +32,16 @@ class ChargerV2(BaseCharger):
         # V2: 0 = start charging, 1 = stop charging
         await self._post_page_event(f"evseEnabled={0 if enabled else 1}")
 
+    async def async_check_credentials(self) -> None:
+        """Probe the one handler that enforces Basic auth — see BaseCharger.
+
+        "/" is the static-file handler, and the only place this firmware checks
+        credentials. Measured on R3.05.4 (2026-08-13): a wrong password answers
+        401 in 0.13 s, while the same password on POST /main answers 200. Not
+        done for V1 — that generation was never measured this way.
+        """
+        await self._request_text("GET", "/")
+
     async def sync_time(self) -> None:
         ts = int(datetime.now(tz=UTC).timestamp())
         await self._post_page_event(f"systemTime={ts}")

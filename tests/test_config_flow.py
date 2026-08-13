@@ -44,6 +44,17 @@ def _patch_status(monkeypatch, *, exc=None, payload=None):
         "custom_components.eveus.charger.v1.ChargerV1.async_load_sw_version", _no_version
     )
 
+    # V2 credentials are probed with a second request (GET /) — stubbed here for
+    # the same reason: this file tests the flow, not the request. The probe's own
+    # behaviour is covered by test_user_invalid_auth_only_main_accepts_anything.
+    async def _credentials_ok(self):
+        return None
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v2.ChargerV2.async_check_credentials",
+        _credentials_ok,
+    )
+
 
 def _user_input(ip="1.2.3.4", model="v2", prefix=""):
     return {
@@ -84,6 +95,55 @@ async def test_user_invalid_auth(hass, monkeypatch):
     result = await hass.config_entries.flow.async_configure(result["flow_id"], _user_input())
     assert result["type"] == FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_auth"}
+
+
+async def test_user_invalid_auth_only_main_accepts_anything(hass, monkeypatch):
+    """A wrong password must be caught even though /main answers 200 to it.
+
+    POST handlers on this hardware check no auth at all (KB-01 §1.2), so the
+    payload alone made every password look valid. The flow now probes the one
+    handler that does check — a V2 station whose GET / answers 401.
+    """
+    _patch_status(monkeypatch)                      # /main happily returns a V2 payload
+
+    async def _rejects(self):
+        raise aiohttp.ClientResponseError(_req(), (), status=401)
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v2.ChargerV2.async_check_credentials", _rejects
+    )
+
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], _user_input())
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+
+
+async def test_user_v1_payload_is_not_credential_probed(hass, monkeypatch):
+    """V1 was never measured this way — probing it could make it unaddable.
+
+    A probe that answered 401 to a valid password would block adding the station
+    entirely, which is worse than not checking it.
+    """
+    _patch_status(monkeypatch, payload=_V1_PAYLOAD)
+    probed = []
+
+    async def _rejects(self):
+        probed.append(1)
+        raise aiohttp.ClientResponseError(_req(), (), status=401)
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v2.ChargerV2.async_check_credentials", _rejects
+    )
+
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _user_input(model="v1")
+    )
+
+    assert not probed, "a V1 payload must not be credential-probed"
+    assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
 async def test_user_cannot_connect(hass, monkeypatch):

@@ -112,6 +112,18 @@ class BaseCharger:
     async def async_load_sw_version(self) -> None:
         """Read the firmware version once at setup, where /main lacks one."""
 
+    async def async_check_credentials(self) -> None:
+        """Raise ClientResponseError(401) if the station rejects our credentials.
+
+        Reading /main proves nothing about the password: POST handlers on this
+        hardware check no authentication at all (firmware KB-01 §1.2, live on V1
+        2026-07-30 and on V2 R3.05.4 2026-08-13 — a deliberately wrong password
+        still returned 200 and a full JSON body). Only a generation whose
+        auth-checking path has actually been measured overrides this; a probe
+        that answered 401 to a VALID password would make the charger impossible
+        to add at all, which is worse than not checking. Default: no check.
+        """
+
     async def set_current(self, value: int) -> None:
         # The station range-checks nothing here: it truncates to a uint8_t and
         # keeps the result, so currentSet=999 was stored as 231 (999 & 0xFF) in

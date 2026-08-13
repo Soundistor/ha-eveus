@@ -208,7 +208,18 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else ChargerV2(ip, username, password, hass=self.hass)
         )
         try:
-            return None, await charger.get_status()
+            payload = await charger.get_status()
+            # /main answers 200 whatever the password is, so it validates only
+            # reachability. Credentials need the handler that actually checks
+            # them, and only where that was measured — hence the V2 payload
+            # signal (same one _model_mismatch reads) rather than the model the
+            # user picked: a V1 station chosen as "v2" must still fail as a model
+            # mismatch, not as invalid_auth. Same charger instance, so its lock
+            # keeps the two requests off each other — the station serves one
+            # connection at a time.
+            if "verFWWifi" in payload:
+                await charger.async_check_credentials()
+            return None, payload
         except aiohttp.ClientResponseError as exc:
             if exc.status == 401:
                 return "invalid_auth", None

@@ -718,7 +718,7 @@
   - **Перевірка:** тест — `ClientResponseError(status=401)` від `get_status` дає `UpdateFailed` і
     repair issue, а не `ConfigEntryAuthFailed`; опитування переплановується.
 
-- [ ] 🔴 **Config flow приймає будь-який пароль — перевірка креденшелів робиться ендпоінтом, який їх
+- [x] 🔴 **Config flow приймає будь-який пароль — перевірка креденшелів робиться ендпоінтом, який їх
   не перевіряє**  (reviewed: 2026-08-13)
   - **Де:** `config_flow.py:210-216` — `_test_connection` валідує через `charger.get_status()`, тобто
     `POST /main`.
