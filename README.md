@@ -141,7 +141,7 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | `last_session_duration` | s | Duration of the previous completed session, frozen at session end (survives restart) |
 | `systemtime` | — | Charger clock (diagnostic; disabled by default — enable manually if needed) |
 | `time_drift` | s | Charger clock offset vs HA time, `0` = in sync (diagnostic) |
-| `leakvalue` | mA | Leakage current (diagnostic) |
+| `leakvalue` | — | Raw earth-leakage channel (diagnostic). Deliberately unitless: the scale is unconfirmed, and the vendor's "mA" label does not match the firmware's own trip thresholds. |
 
 ### Sensors — V2 only
 
