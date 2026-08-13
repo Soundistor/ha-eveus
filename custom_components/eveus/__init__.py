@@ -5,6 +5,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 
 from .charger.v1 import ChargerV1
 from .charger.v2 import ChargerV2
@@ -14,6 +15,12 @@ from .coordinator import ChargerCoordinator, EveusConfigEntry, EveusData
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "select", "button"]
+
+# Repair issues raised by older versions under ids nothing deletes any more, so
+# they sit in .storage forever: `cannot_connect` was still live on prod
+# 2026-08-13, created 2026-06-14, and `device_error` was the shared id before it
+# gained a per-entry suffix. Deleting an issue that isn't there is a no-op.
+LEGACY_ISSUE_IDS = ("cannot_connect", "device_error")
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -29,6 +36,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: EveusConfigEntry) -> boo
     username = entry.data.get("username")
     password = entry.data.get("password")
     prefix = entry.data.get(CONF_DEVICE_PREFIX, "")
+
+    for legacy in LEGACY_ISSUE_IDS:
+        ir.async_delete_issue(hass, DOMAIN, legacy)
 
     charger = (
         ChargerV1(ip, username, password, hass=hass)

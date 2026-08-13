@@ -78,6 +78,26 @@ async def test_no_repair_issue_for_an_unreachable_charger(hass, unreachable):
     assert entry.state is ConfigEntryState.LOADED
 
 
+async def test_setup_clears_legacy_repair_issues(hass, unreachable):
+    """Issue ids no version raises any more used to sit in .storage forever.
+
+    Prod diagnostics on 2026-08-13 still carried a live `cannot_connect` issue
+    created 2026-06-14; `device_error` is the pre-2026-07-17 shared id, before it
+    gained a per-entry suffix.
+    """
+    registry = ir.async_get(hass)
+    for legacy in ("cannot_connect", "device_error"):
+        registry.async_get_or_create(
+            DOMAIN, legacy, is_fixable=False, is_persistent=False,
+            severity=ir.IssueSeverity.ERROR, translation_key="device_error",
+        )
+
+    await _setup(hass)
+
+    for legacy in ("cannot_connect", "device_error"):
+        assert registry.async_get_issue(DOMAIN, legacy) is None, legacy
+
+
 async def test_reading_every_entity_survives_missing_data(hass, unreachable):
     """No value property may explode while coordinator.data is None.
 

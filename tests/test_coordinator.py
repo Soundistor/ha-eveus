@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock
 
 import aiohttp
-from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -162,14 +161,21 @@ async def test_long_offline_drops_baseline(hass):
 # (c) error paths
 # --------------------------------------------------------------------------- #
 
-async def test_auth_error_raises_and_no_issue(hass):
+async def test_401_is_an_ordinary_error_not_an_auth_failure(hass):
+    """No auth branch here: /main is a POST, and POST checks no credentials.
+
+    ConfigEntryAuthFailed would stop polling for good — the core reschedules only
+    when the failure was not an auth failure — so an unreachable branch that
+    could never be right for this hardware was removed. Credentials are the
+    config flow's job (it probes the handler that does check them).
+    """
     coord = _make_coordinator(hass)
     coord.charger.set_exc(_client_response_error(401))
 
-    with pytest.raises(ConfigEntryAuthFailed):
+    with pytest.raises(UpdateFailed):
         await coord._async_update_data()
 
-    assert ir.async_get(hass).async_get_issue(DOMAIN, _ISSUE_ID) is None
+    assert ir.async_get(hass).async_get_issue(DOMAIN, _ISSUE_ID) is not None
 
 
 async def test_unreachable_raises_updatefailed_no_issue(hass):

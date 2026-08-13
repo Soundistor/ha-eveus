@@ -10,7 +10,6 @@ from typing import Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -143,23 +142,18 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # unavailable; don't raise a repair issue. A brief blip keeps the
             # baseline (see STALE_STATE_AFTER); only a long gap resets it.
             raise UpdateFailed(f"Charger unreachable: {exc}") from exc
-        except aiohttp.ClientResponseError as exc:
-            if exc.status == 401:
-                # Invalid credentials — HA starts the re-auth flow.
-                raise ConfigEntryAuthFailed(f"Invalid credentials: {exc}") from exc
-            ir.async_create_issue(
-                self.hass,
-                DOMAIN,
-                f"device_error_{self._entry_id}",
-                is_fixable=False,
-                severity=ir.IssueSeverity.ERROR,
-                translation_key="device_error",
-                translation_placeholders={"device_name": self._device_name},
-            )
-            raise UpdateFailed(f"Error updating: {exc}") from exc
         except Exception as exc:
-            # Charger answered but the request failed (auth, malformed response,
-            # wrong firmware model, …) — this needs the user's attention.
+            # Charger answered but the request failed (an HTTP error status,
+            # malformed response, wrong firmware model, …) — this needs the
+            # user's attention.
+            #
+            # No 401 branch on purpose: /main is a POST, and POST handlers on this
+            # firmware check no credentials at all (KB-01 §1.2, live on V1
+            # 2026-07-30 and V2 R3.05.4 2026-08-13). A ConfigEntryAuthFailed here
+            # would have been unreachable code that, if it ever did fire, stops
+            # polling for good — the core only reschedules when the failure was
+            # not an auth failure. Credentials are validated in the config flow,
+            # which probes the one handler that does check them.
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
