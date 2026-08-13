@@ -56,8 +56,13 @@ def test_contract_codes_are_pinned():
     would have to be edited on every legitimate addition.
     """
     assert V2_SUBSTATE_LIMIT_MAP[9] == "external_limit"
+    # Live-verified 2026-08-13: writing evseEnabled=1 on R3.05.4 put subState at
+    # 1 and clearing it put it back to 0 (KB-03 R-0d).
+    assert V2_SUBSTATE_LIMIT_MAP[1] == "limited_by_user"
+    assert V2_SUBSTATE_LIMIT_MAP[0] == "no_limits"
     assert V2_SUBSTATE_ERROR_MAP[3] == "relay_error"
     assert V2_STATE_MAP[4] == "charging"
+    assert V2_STATE_MAP[5] == "charge_complete"
 
 
 def test_substate_missing_and_unknown():
