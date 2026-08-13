@@ -146,6 +146,33 @@ async def test_user_v1_payload_is_not_credential_probed(hass, monkeypatch):
     assert result["type"] == FlowResultType.CREATE_ENTRY
 
 
+async def test_empty_credentials_are_not_probed(hass, monkeypatch):
+    """No credentials means the user deliberately does not authenticate.
+
+    The integration never needs them — every working call is a POST, which this
+    firmware does not check. Probing anyway sends no Authorization header and
+    fails against a station that does have a password set.
+    """
+    _patch_status(monkeypatch)
+    probed = []
+
+    async def _rejects(self):
+        probed.append(1)
+        raise aiohttp.ClientResponseError(_req(), (), status=401)
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v2.ChargerV2.async_check_credentials", _rejects
+    )
+
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**_user_input(), CONF_USERNAME: "", CONF_PASSWORD: ""}
+    )
+
+    assert not probed, "empty credentials must not be probed"
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
 async def test_user_cannot_connect(hass, monkeypatch):
     _patch_status(monkeypatch, exc=aiohttp.ClientConnectionError("down"))
     result = await _start_user(hass)
@@ -224,6 +251,40 @@ async def test_reconfigure_success(hass, monkeypatch):
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert entry.data[CONF_IP_ADDRESS] == "5.5.5.5"
+
+
+async def test_reconfigure_keeps_the_stored_password(hass, monkeypatch):
+    """An empty password field means "keep the stored one", not "clear it".
+
+    The form never pre-fills the secret, so someone changing only the IP after a
+    DHCP change submits an empty field. That used to fail the credential probe
+    (no Authorization header -> 401) and wipe the stored password on success.
+    """
+    _patch_status(monkeypatch)
+    probed = []
+
+    async def _record(self):
+        probed.append(self.auth)
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v2.ChargerV2.async_check_credentials", _record
+    )
+
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="1.2.3.4", data=_user_input())
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_IP_ADDRESS: "5.5.5.5", CONF_MODEL: "v2", CONF_USERNAME: "admin"},
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_IP_ADDRESS] == "5.5.5.5"
+    assert entry.data[CONF_PASSWORD] == "secret"
+    assert probed and probed[0].password == "secret", "the probe must use the stored password"
 
 
 async def test_reconfigure_duplicate_ip(hass, monkeypatch):

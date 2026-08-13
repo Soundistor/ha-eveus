@@ -107,7 +107,12 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ip = user_input[CONF_IP_ADDRESS]
             model = user_input[CONF_MODEL]
             username = user_input.get(CONF_USERNAME)
-            password = user_input.get(CONF_PASSWORD)
+            # The password field is never pre-filled — sending the stored secret
+            # to the browser buys nothing. So an empty field means "keep the one
+            # I already have", not "clear it": otherwise reconfiguring the IP
+            # after a DHCP change would both fail the credential probe below and
+            # wipe the stored password on the way out.
+            password = user_input.get(CONF_PASSWORD) or entry.data.get(CONF_PASSWORD)
 
             if any(
                 e.entry_id != entry.entry_id and e.data.get(CONF_IP_ADDRESS) == ip
@@ -217,7 +222,12 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # mismatch, not as invalid_auth. Same charger instance, so its lock
             # keeps the two requests off each other — the station serves one
             # connection at a time.
-            if "verFWWifi" in payload:
+            # Empty credentials mean the user deliberately does not authenticate
+            # (the integration itself never needs to: every working call is a
+            # POST, which this firmware does not check). Probing them would send
+            # no Authorization header at all and fail against a station that does
+            # have a password set.
+            if "verFWWifi" in payload and username:
                 await charger.async_check_credentials()
             return None, payload
         except aiohttp.ClientResponseError as exc:
