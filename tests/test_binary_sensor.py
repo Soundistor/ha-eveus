@@ -42,13 +42,25 @@ def _make(key):
     return sensor
 
 
-def _feed(sensor, key, on, *, state="charging", substate=""):
-    sensor.coordinator.data = {
-        key: _ACTIVE[key] if on else _INACTIVE[key],
-        "state": state,
-        "subState": substate,
-    }
+def _feed(sensor, key, on, *, state="charging", substate="", ground_ctrl=1):
+    """Feed one successful frame.
+
+    ground_ctrl defaults to 1 (PE monitoring ON) because the ground sensor only
+    makes a safety claim when the station is actually monitoring earth; without
+    it every debounce assertion below would read `None`.
+    """
+    frame = {"groundCtrl": ground_ctrl, "state": state, "subState": substate}
+    frame[key] = _ACTIVE[key] if on else _INACTIVE[key]
+    sensor.coordinator.data = frame
     sensor._handle_coordinator_update()
+
+
+def _fail_poll(sensor):
+    """A failed poll, exactly as the core presents it: the PREVIOUS frame is
+    still in coordinator.data and only last_update_success flips."""
+    sensor.coordinator.last_update_success = False
+    sensor._handle_coordinator_update()
+    sensor.coordinator.last_update_success = True
 
 
 def test_debounce_requires_three_consecutive_on():
@@ -125,14 +137,82 @@ def test_firmware_fault_bypasses_debounce_via_substate():
     assert sensor.is_on is True
 
 
-def test_firmware_fault_off_clears_immediately():
+def test_declared_ground_fault_wins_over_the_ground_field():
+    """Rewritten 2026-08-14 — it used to pin the bug.
+
+    The old assertion was `is_on is False` for a frame carrying state=no_ground
+    with ground=1: "fault + raw off -> count 0". That made the SAFETY sensor
+    claim "safe" during the very fault it exists to report. A grounding fault
+    declared by state is positive evidence and outranks the field.
+    """
     sensor = _make("ground")
     _feed(sensor, "ground", True)
     _feed(sensor, "ground", True)
     _feed(sensor, "ground", True)
     assert sensor.is_on is True
-    _feed(sensor, "ground", False, state="no_ground")  # fault + raw off -> count 0
+    _feed(sensor, "ground", False, state="no_ground")
+    assert sensor.is_on is True
+
+
+def test_other_firmware_fault_off_still_clears_immediately():
+    """Only ground faults get the override — relay_error must not raise it."""
+    sensor = _make("ground")
+    _feed(sensor, "ground", True)
+    _feed(sensor, "ground", True)
+    _feed(sensor, "ground", True)
+    assert sensor.is_on is True
+    _feed(sensor, "ground", False, state="charging", substate="relay_error")
     assert sensor.is_on is False
+
+
+def test_unknown_while_pe_monitoring_is_off():
+    """groundCtrl=0 -> the station is not checking earth, so "safe" is unsayable."""
+    sensor = _make("ground")
+    for _ in range(DEBOUNCE_THRESHOLD):
+        _feed(sensor, "ground", True, ground_ctrl=0)
+    assert sensor.is_on is None
+
+
+def test_missing_ground_ctrl_also_reads_unknown():
+    """`!= 1`, not `== 0`: an absent key must not read as "monitoring on"."""
+    sensor = _make("ground")
+    sensor.coordinator.data = {"ground": _ACTIVE["ground"], "state": "charging", "subState": ""}
+    sensor._handle_coordinator_update()
+    assert sensor.is_on is None
+
+
+def test_declared_ground_fault_reported_even_with_pe_monitoring_off():
+    sensor = _make("ground")
+    _feed(sensor, "ground", True, state="error", substate="grounding_error", ground_ctrl=0)
+    assert sensor.is_on is True
+
+
+def test_failed_poll_drops_the_streak_and_keeps_state():
+    """A failed poll must not be counted as a reading.
+
+    The core notifies listeners on the first failure with the previous frame
+    still in coordinator.data, so the old code re-counted it: two real readings
+    plus one failure tripped the threshold.
+    """
+    sensor = _make("ground")
+    _feed(sensor, "ground", True)
+    _feed(sensor, "ground", True)          # count 2, not yet on
+    assert sensor.is_on is False
+    _fail_poll(sensor)
+    assert sensor.is_on is False           # unchanged
+    assert sensor._debounce_count == 0     # streak dropped
+    _feed(sensor, "ground", True)
+    assert sensor.is_on is False           # needs three in a row again
+
+
+def test_failed_poll_keeps_a_raised_safety_state():
+    """Offline is normal for this device — a failure must not clear a real fault."""
+    sensor = _make("ground")
+    for _ in range(DEBOUNCE_THRESHOLD):
+        _feed(sensor, "ground", True)
+    assert sensor.is_on is True
+    _fail_poll(sensor)
+    assert sensor.is_on is True
 
 
 def _make_connectivity():

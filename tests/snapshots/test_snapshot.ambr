@@ -240,7 +240,7 @@
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
-      'state': 'off',
+      'state': 'unknown',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
@@ -906,7 +906,7 @@
       'last_changed': <ANY>,
       'last_reported': <ANY>,
       'last_updated': <ANY>,
-      'state': 'off',
+      'state': 'unknown',
     }),
     StateSnapshot({
       'attributes': ReadOnlyDict({
