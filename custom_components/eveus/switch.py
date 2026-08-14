@@ -45,14 +45,18 @@ class ChargerSwitch(EveusEntity, SwitchEntity):
         self._optimistic_polls = 0
 
     @property
-    def is_on(self) -> bool:
+    def is_on(self) -> bool | None:
         if self._optimistic is not None:
             return self._optimistic
         if not self.coordinator.data:
             return False
         enabled = self.coordinator.data.get("evseEnabled")
         if enabled is None:
-            return False
+            # No reading, so no claim: False would mean "confirmed off" and fire
+            # any "if charging is off, turn it on" automation. _handle_coordinator_
+            # update already treats a missing key as None ("don't know") — this
+            # property used to be the one place saying otherwise.
+            return None
         return self._charger.is_charging_active(enabled)
 
     async def async_turn_on(self, **kwargs):
