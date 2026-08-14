@@ -54,6 +54,25 @@ def test_reads_v2_polarity():
     assert switch.is_on is False
 
 
+def test_missing_evse_enabled_is_unknown_not_off():
+    """`False` would mean "confirmed off" and fire an "if off, turn on" automation."""
+    switch, coord = _switch()
+    coord.data = {"state": 4}
+    assert switch.is_on is None
+
+
+async def test_missing_key_does_not_cut_the_optimistic_state_short():
+    """A frame without the key must not count as the poll agreeing."""
+    switch, coord = _switch()
+
+    await switch.async_turn_off()
+    assert switch.is_on is False         # optimistic
+
+    coord.data = {"state": 4}            # no evseEnabled at all
+    switch._handle_coordinator_update()
+    assert switch.is_on is False         # still optimistic, not None
+
+
 async def test_turn_off_shows_immediately_and_defers_the_refresh():
     switch, coord = _switch()
 
