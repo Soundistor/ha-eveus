@@ -10,7 +10,7 @@ from typing import Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -23,6 +23,7 @@ from .const import (
     SESSION_ACTIVE_STATES,
     session_transition,
 )
+from .entity import firmware_version
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -100,6 +101,7 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_success = None
         self._sw_version_loaded = False
         self._sw_version_attempts = 0
+        self._device_version_written = False
         self._live_energy = None
         self._live_time = None
         self.last_session = None
@@ -147,6 +149,7 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._prev_state = None
             self._last_success = now
             await self._load_sw_version_once()
+            self._write_sw_version_to_registry(data)
             self._process_session_events(data)
             return data
         except UNREACHABLE_ERRORS as exc:
@@ -176,6 +179,38 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 translation_placeholders={"device_name": self._device_name},
             )
             raise UpdateFailed(f"Error updating: {exc}") from exc
+
+    @callback
+    def _write_sw_version_to_registry(self, data: dict[str, Any]) -> None:
+        """Put the firmware version on the device page after an offline start.
+
+        HA reads `device_info` exactly once, when an entity registers. Setup no
+        longer waits for the charger to be reachable, so at registration time
+        there is no version yet — and it would never appear until a reload that
+        happens to catch the station online, which for a charger that comes up
+        once a week is a long time.
+
+        Not gated on "the first successful poll": on V1 the version arrives from
+        a separate GET that _load_sw_version_once retries, so it can land on the
+        second or third success.
+        """
+        if self._device_version_written:
+            return
+        version = firmware_version(data, self.charger)
+        if not version:
+            return
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(identifiers={(DOMAIN, self._entry_id)})
+        if device is None:
+            # Online start: this poll runs BEFORE async_forward_entry_setups, so
+            # no device exists yet and device_info will carry the version anyway.
+            # Deliberately not touching device.id here — an AttributeError inside
+            # _async_update_data lands in the broad except below and turns a
+            # healthy poll into a repair issue with every entity unavailable.
+            # The flag stays down so a later poll can still do the write.
+            return
+        registry.async_update_device(device.id, sw_version=version)
+        self._device_version_written = True
 
     async def _load_sw_version_once(self) -> None:
         """Fetch the firmware version on the first successful poll.

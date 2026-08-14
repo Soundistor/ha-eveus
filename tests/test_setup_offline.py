@@ -12,7 +12,7 @@ from __future__ import annotations
 import aiohttp
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_UNAVAILABLE
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -191,3 +191,61 @@ async def test_daily_energy_survives_an_offline_unload_setup_cycle(hass, unreach
     await entry.runtime_data.coordinator.async_refresh()
     await hass.async_block_till_done()
     assert hass.states.get(entity_id).state == "5.5"
+
+
+async def test_sw_version_reaches_the_device_page_after_an_offline_start(
+    hass, unreachable, monkeypatch
+):
+    """HA reads device_info once, at entity registration.
+
+    With setup no longer waiting for the charger, that happens before any
+    version exists, so the device page stayed blank until a reload that caught
+    the station online.
+    """
+    from homeassistant.helpers import device_registry as dr
+
+    entry = await _setup(hass)
+
+    registry = dr.async_get(hass)
+    device = registry.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    assert device is not None
+    assert device.sw_version is None      # nothing to know yet
+
+    async def _ok(self):
+        return {"state": 2, "verFWMain": "GRM070A-R3.05.4 "}
+
+    monkeypatch.setattr("custom_components.eveus.charger.v2.ChargerV2.get_status", _ok)
+    await entry.runtime_data.coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    device = registry.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    # Stripped: the station sends a trailing space, and the two paths into the
+    # registry must not disagree about the version string.
+    assert device.sw_version == "GRM070A-R3.05.4"
+
+
+async def test_sw_version_is_written_to_the_registry_only_once(
+    hass, unreachable, monkeypatch
+):
+    entry = await _setup(hass)
+
+    async def _ok(self):
+        return {"state": 2, "verFWMain": "GRM070A-R3.05.4"}
+
+    monkeypatch.setattr("custom_components.eveus.charger.v2.ChargerV2.get_status", _ok)
+
+    writes = []
+    real_update = dr.DeviceRegistry.async_update_device
+
+    def _counting_update(self, device_id, **kwargs):
+        if "sw_version" in kwargs:
+            writes.append(kwargs["sw_version"])
+        return real_update(self, device_id, **kwargs)
+
+    monkeypatch.setattr(dr.DeviceRegistry, "async_update_device", _counting_update)
+
+    for _ in range(3):
+        await entry.runtime_data.coordinator.async_refresh()
+        await hass.async_block_till_done()
+
+    assert writes == ["GRM070A-R3.05.4"], writes
