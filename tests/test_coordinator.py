@@ -312,3 +312,29 @@ async def test_sw_version_retries_are_bounded(hass):
         await _poll_ok(coord, state="standby")
 
     assert charger.sw_version_loads == 3
+
+
+async def test_garbage_enum_frame_yields_unknown_without_an_issue(hass):
+    """Runs the REAL ChargerV2.transform_data, unlike FakeCharger's identity.
+
+    A non-numeric enum value used to raise out of transform_data, get caught by
+    the coordinator's broad except and become a repair issue for the whole poll,
+    when the honest outcome is one unknown sensor.
+    """
+    from custom_components.eveus.charger.v2 import ChargerV2
+
+    charger = ChargerV2("1.2.3.4", hass=hass)
+
+    async def _garbage_frame():
+        return {"state": "abc", "subState": 1, "aiStatus": None}
+
+    charger.get_status = _garbage_frame
+    coord = ChargerCoordinator(hass, charger, _ENTRY_ID, "Eveus Test")
+
+    data = await coord._async_update_data()
+
+    assert data["state"] == "unknown"
+    assert data["subState"] == "unknown"      # not "limited_by_user"
+    assert data["aiStatus"] == "unknown"
+    assert coord.last_update_success is True
+    assert ir.async_get(hass).async_get_issue(DOMAIN, _ISSUE_ID) is None

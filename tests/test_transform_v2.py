@@ -151,3 +151,41 @@ def test_temperature_boundary_and_garbage():
     out = _charger().transform_data({"temperature1": -50, "temperature2": "x"})
     assert out["temperature1"] == -50    # exactly -50 is still a reading
     assert out["temperature2"] == "x"    # non-numeric left alone, never raises
+
+
+@pytest.mark.parametrize("garbage", [None, "", "abc", [], {}, float("nan")])
+def test_unparseable_enum_codes_fold_to_unknown(garbage):
+    """Non-numeric garbage used to escape transform_data entirely.
+
+    A numeric-but-unmapped code already folded to "unknown" via the maps'
+    .get() fallback; garbage raised out of here, was caught by the coordinator's
+    broad except and became a repair issue for the whole poll.
+    """
+    out = _charger().transform_data(
+        {"state": garbage, "subState": garbage, "aiStatus": garbage}
+    )
+    assert out["state"] == "unknown"
+    assert out["subState"] == "unknown"
+    assert out["aiStatus"] == "unknown"
+
+
+def test_unreadable_state_does_not_pick_the_limit_map():
+    """An unknown state must not make subState read as a charging limit.
+
+    subState 1 means "limited_by_user" in the limit map. Without a readable
+    state we cannot know which map applies, so the only honest answer is
+    unknown — silently defaulting to the limit map would invent a reason.
+    """
+    out = _charger().transform_data({"state": "abc", "subState": 1})
+    assert out["state"] == "unknown"
+    assert out["subState"] == "unknown"
+
+
+def test_json_null_state_is_a_typeerror_not_a_valueerror():
+    """raw.get("state", 0) returns None when the key is present as JSON null.
+
+    int(None) raises TypeError, so an except clause listing only ValueError
+    would miss the most reachable kind of garbage.
+    """
+    out = _charger().transform_data({"state": None})
+    assert out["state"] == "unknown"

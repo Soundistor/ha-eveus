@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from charger.v1 import ChargerV1
+import pytest
 
 
 def _charger() -> ChargerV1:
@@ -133,3 +134,11 @@ def test_adaptive_current_is_hidden_while_adaptive_mode_is_off():
     assert _value({"aiStatus": "voltage", "aiModecurrent": 7}) == 7
     assert _value({"aiStatus": "off", "aiModecurrent": 6}) is None
     assert _value({"aiModecurrent": 6}) is None
+
+
+@pytest.mark.parametrize("garbage", [None, "", "abc", [], {}, float("nan")])
+def test_unparseable_enum_codes_fold_to_unknown(garbage):
+    """Same hardening as V2: garbage in an enum field must not kill the poll."""
+    out = _charger().transform_data({"state": garbage, "aiStatus": garbage})
+    assert out["state"] == "unknown"
+    assert out["aiStatus"] == "unknown"
