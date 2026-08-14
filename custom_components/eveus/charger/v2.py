@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from .base import AI_MODE_MAP, BaseCharger, blank_absent_temperature
+from .base import AI_MODE_MAP, BaseCharger, as_enum_int, blank_absent_temperature
 
 V2_STATE_MAP = {
     0: "startup",      1: "system_test",      2: "standby",
@@ -80,16 +80,19 @@ class ChargerV2(BaseCharger):
 
     def transform_data(self, raw: dict) -> dict:
         raw = dict(raw)
-        state_num = int(raw.get("state", 0))
+        state_num = as_enum_int(raw.get("state", 0))
         raw["state"] = V2_STATE_MAP.get(state_num, "unknown")
         # subState depends on whether we're in error state
         substate_num = raw.get("subState")
-        if substate_num is None:
+        if substate_num is None or state_num is None:
+            # Without a readable state we cannot pick a map: the error map only
+            # applies on a proven state_num == 7, and defaulting to the limit map
+            # would read an unknown frame's subState as a charging *limit*.
             raw["subState"] = "unknown"
         else:
             mapper = V2_SUBSTATE_ERROR_MAP if state_num == 7 else V2_SUBSTATE_LIMIT_MAP
-            raw["subState"] = mapper.get(int(substate_num), "unknown")
-        raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "unknown")
+            raw["subState"] = mapper.get(as_enum_int(substate_num), "unknown")
+        raw["aiStatus"] = AI_MODE_MAP.get(as_enum_int(raw.get("aiStatus", 0)), "unknown")
         for key in ("temperature1", "temperature2"):
             if key in raw:
                 raw[key] = blank_absent_temperature(raw[key])

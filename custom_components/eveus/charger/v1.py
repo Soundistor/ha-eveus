@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 import re
 
-from .base import AI_MODE_MAP, BaseCharger, blank_absent_temperature
+from .base import AI_MODE_MAP, BaseCharger, as_enum_int, blank_absent_temperature
 
 # The station's own enum, read off the web UI it serves (EnergyStar V5.23) and
 # confirmed live on 2026-07-30: unplugged reads 12, a plugged car that is not
@@ -125,8 +125,8 @@ class ChargerV1(BaseCharger):
         raw["sessionEnergy"] = round(int(raw.get("sessionEnergy", 0)) * 0.1, 3)
         raw["totalEnergy"] = round(int(raw.get("totalEnergy", 0)) * 0.1, 3)
         # Map enums to strings
-        raw["state"] = V1_STATE_MAP.get(int(raw.get("state", 0)), "unknown")
-        raw["aiStatus"] = AI_MODE_MAP.get(int(raw.get("aiStatus", 0)), "unknown")
+        raw["state"] = V1_STATE_MAP.get(as_enum_int(raw.get("state", 0)), "unknown")
+        raw["aiStatus"] = AI_MODE_MAP.get(as_enum_int(raw.get("aiStatus", 0)), "unknown")
         for key in ("temperature1", "temperature2"):
             if key in raw:
                 raw[key] = blank_absent_temperature(raw[key])

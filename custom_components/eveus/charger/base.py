@@ -32,6 +32,24 @@ def blank_absent_temperature(value):
         return value
 
 
+def as_enum_int(value):
+    """int() for an enum code, or None when the raw value cannot be one.
+
+    A numeric-but-unmapped code already folds to "unknown" through the maps'
+    .get() fallback. Non-numeric garbage did not: it escaped transform_data and
+    surfaced as a repair issue for the whole poll instead of one unknown sensor.
+
+    TypeError matters most: a JSON null leaves raw.get("state", 0) as None (the
+    default does not fire — the key is present) and int(None) raises TypeError,
+    not ValueError. None is not a key in any map, so callers get "unknown" for
+    free.
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 class BaseCharger:
     """Общая часть: запросы через общую сессию HA, базовый интерфейс.
 
