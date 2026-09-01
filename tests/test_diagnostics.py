@@ -30,9 +30,18 @@ def entry_fixture():
     # serialNumCPU is empty in the shared fixture; fill it here rather than in
     # the file, which also feeds the golden and snapshot tests.
     data["serialNumCPU"] = "CPU-SENTINEL-9f3a"
+    coordinator = SimpleNamespace(
+        data=data,
+        charger=SimpleNamespace(
+            sw_version=None,
+            sw_version_error="ClientResponseError (HTTP 401)",
+        ),
+        _sw_version_attempts=3,
+        _sw_version_loaded=True,
+    )
     return SimpleNamespace(
         data=dict(_CONFIG_SENTINELS),
-        runtime_data=SimpleNamespace(coordinator=SimpleNamespace(data=data)),
+        runtime_data=SimpleNamespace(coordinator=coordinator),
     )
 
 
@@ -60,3 +69,17 @@ async def test_debugging_fields_survive(entry):
     out = await async_get_config_entry_diagnostics(None, entry)
     assert out["coordinator_data"]["currentSet"] == 30
     assert out["coordinator_data"]["verFWMain"] == entry.runtime_data.coordinator.data["verFWMain"]
+
+
+async def test_why_the_version_read_failed_is_recoverable(entry):
+    """Diagnostics is the route the 2026-09-01 incident was actually solved by.
+
+    The read swallows its own failure so it cannot break the poll, so this is
+    the only place the cause survives. The attempt count is what separates one
+    transient miss from "gave up".
+    """
+    out = await async_get_config_entry_diagnostics(None, entry)
+
+    assert out["sw_version"]["error"] == "ClientResponseError (HTTP 401)"
+    assert out["sw_version"]["attempts"] == 3
+    assert out["sw_version"]["gave_up"] is True

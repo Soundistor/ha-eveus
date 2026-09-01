@@ -21,4 +21,14 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: EveusCo
             if coordinator.data
             else coordinator.data
         ),
+        # A failed version read is silent by design (it must not break the poll),
+        # so this is the only place its cause is recoverable. The attempt count
+        # separates one transient miss from "gave up".
+        "sw_version": {
+            "value": coordinator.charger.sw_version,
+            "error": coordinator.charger.sw_version_error,
+            "attempts": coordinator._sw_version_attempts,
+            "gave_up": coordinator._sw_version_loaded
+            and coordinator.charger.sw_version is None,
+        },
     }

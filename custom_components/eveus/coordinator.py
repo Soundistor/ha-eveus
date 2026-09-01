@@ -236,6 +236,18 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._sw_version_attempts += 1
         if self._sw_version_attempts >= _SW_VERSION_MAX_ATTEMPTS:
             self._sw_version_loaded = True
+            # Warn once, and only when a reason was actually recorded. Exhausting
+            # the counter is not by itself a failure: the base implementation is a
+            # no-op, so every V2 install runs it out and records nothing. Keying
+            # off the counter alone would warn on every V2 start.
+            if self.charger.sw_version_error:
+                _LOGGER.warning(
+                    "%s: could not read the firmware version after %d attempts (%s). "
+                    "The device page will show no firmware.",
+                    self.charger.ip,
+                    self._sw_version_attempts,
+                    self.charger.sw_version_error,
+                )
 
     def _process_session_events(self, data) -> None:
         new_state = data.get("state")

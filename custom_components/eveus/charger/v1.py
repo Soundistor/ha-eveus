@@ -72,11 +72,24 @@ class ChargerV1(BaseCharger):
         """
         try:
             page = await self._request_text("GET", "/")
-        except Exception:  # a missing version must never break setup
+        except Exception as exc:  # a missing version must never break setup
+            status = getattr(exc, "status", None)
+            self.sw_version_error = (
+                f"{type(exc).__name__}"
+                + (f" (HTTP {status})" if status is not None else "")
+            )
             return
         match = re.search(r"EnergyStar\s*V[\d.]+", page)
-        if match:
-            self.sw_version = match.group(0)
+        if not match:
+            # The GET succeeded, so there is no exception to report — without
+            # this branch a changed footer stays as invisible as it was before
+            # this method recorded anything at all. The page itself is never
+            # stored: it carries the station's identifiers, and this value is
+            # surfaced in diagnostics.
+            self.sw_version_error = "version pattern not found in page"
+            return
+        self.sw_version = match.group(0)
+        self.sw_version_error = None
 
     async def async_check_credentials(self) -> None:
         """Probe the one handler that enforces Basic auth — see BaseCharger.

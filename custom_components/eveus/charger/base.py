@@ -88,6 +88,13 @@ class BaseCharger:
     # it (V2's verFWMain).
     sw_version: str | None = None
 
+    # Why the version read failed, for the generations that read one. Set on
+    # the instance by async_load_sw_version, cleared there on success. The
+    # coordinator uses "is there a reason recorded" to tell a real failure
+    # from "this generation has nothing to read": the base implementation
+    # below is a no-op, so it never records one and never warns.
+    sw_version_error: str | None = None
+
     def __init__(self, ip: str, username: str | None = None,
                  password: str | None = None, hass=None) -> None:
         self.ip = ip
