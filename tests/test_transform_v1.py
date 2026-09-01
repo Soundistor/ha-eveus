@@ -1,6 +1,7 @@
 """Unit tests for ChargerV1.transform_data."""
 
 from datetime import datetime
+import logging
 
 from charger.v1 import ChargerV1
 import pytest
@@ -142,3 +143,59 @@ def test_unparseable_enum_codes_fold_to_unknown(garbage):
     out = _charger().transform_data({"state": garbage, "aiStatus": garbage})
     assert out["state"] == "unknown"
     assert out["aiStatus"] == "unknown"
+
+
+# --------------------------------------------------------------------------- #
+# Numeric fields: same hardening the enum fields already had (as_enum_int)
+# --------------------------------------------------------------------------- #
+
+_NUMERIC = ("voltMeas1", "curMeas1", "sessionEnergy", "totalEnergy")
+
+
+@pytest.mark.parametrize("garbage", [None, "", "abc", [], {}, float("nan")])
+@pytest.mark.parametrize("key", _NUMERIC)
+def test_unparseable_numeric_field_drops_the_key(key, garbage):
+    """Never 0.0, never an exception — the key is simply not written.
+
+    0.0 is the dangerous answer, not the missing key: it passes every
+    `is not None` guard downstream (last_reset, the daily baseline,
+    _live_energy) and the sensor reports a confident zero.
+    """
+    out = _charger().transform_data({key: garbage})
+    assert key not in out
+    assert "powerMeas" not in out
+
+
+def test_absent_numeric_fields_are_not_invented():
+    out = _charger().transform_data({"state": 6})
+    for key in (*_NUMERIC, "powerMeas"):
+        assert key not in out
+
+
+def test_power_is_derived_only_when_both_factors_are_real():
+    out = _charger().transform_data({"voltMeas1": 230})
+    assert "powerMeas" not in out
+    assert out["voltMeas1"] == 230, "a good field must survive a bad neighbour"
+
+
+def test_numeric_strings_parse():
+    """The station sends ints today; a numeric string is still a number."""
+    out = _charger().transform_data({"voltMeas1": "230", "curMeas1": "160"})
+    assert out["curMeas1"] == 16.0
+    assert out["powerMeas"] == 3680.0
+
+
+def test_garbage_is_named_once_per_charger_not_once_per_poll(caplog):
+    charger = _charger()
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            charger.transform_data({"voltMeas1": None, "totalEnergy": "abc"})
+    lines = [r.getMessage() for r in caplog.records if "unparseable numeric" in r.getMessage()]
+    assert len(lines) == 1, "a 30 s poll must not repeat this line forever"
+    assert "voltMeas1" in lines[0] and "totalEnergy" in lines[0]
+
+
+def test_an_absent_key_is_not_reported_as_garbage(caplog):
+    with caplog.at_level(logging.WARNING):
+        _charger().transform_data({"state": 6})
+    assert not [r for r in caplog.records if "unparseable numeric" in r.getMessage()]

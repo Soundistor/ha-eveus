@@ -216,18 +216,27 @@ class MyEVChargerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             payload = await charger.get_status()
             # /main answers 200 whatever the password is, so it validates only
             # reachability. Credentials need the handler that actually checks
-            # them, and only where that was measured — hence the V2 payload
-            # signal (same one _model_mismatch reads) rather than the model the
-            # user picked: a V1 station chosen as "v2" must still fail as a model
-            # mismatch, not as invalid_auth. Same charger instance, so its lock
+            # them: GET /, on both generations (V2 measured 2026-08-13, V1
+            # 2026-08-18 and 2026-09-01). Same charger instance, so its lock
             # keeps the two requests off each other — the station serves one
             # connection at a time.
-            # Empty credentials mean the user deliberately does not authenticate
-            # (the integration itself never needs to: every working call is a
-            # POST, which this firmware does not check). Probing them would send
-            # no Authorization header at all and fail against a station that does
-            # have a password set.
-            if "verFWWifi" in payload and username:
+            #
+            # Two conditions, each ruling out a way this probe would mislead:
+            #
+            # `username` — empty credentials mean the user deliberately does not
+            # authenticate, and the integration is fine with that on V2 (every
+            # working call is a POST, which this firmware does not check) and
+            # merely loses the firmware version on V1. Probing anyway would send
+            # no Authorization header and fail against a station that does have
+            # a password set.
+            #
+            # `not _model_mismatch(...)` — the probe must never answer for a
+            # station of the other generation. A V2 station picked as "v1" would
+            # otherwise come back as invalid_auth and hide the real problem; the
+            # mismatch is the more specific diagnosis and has to win. Before V1
+            # gained its own check this held by accident, because the gate read
+            # the V2 payload signal and V1's async_check_credentials was a no-op.
+            if username and not _model_mismatch(payload, model):
                 await charger.async_check_credentials()
             return None, payload
         except aiohttp.ClientResponseError as exc:

@@ -10,6 +10,7 @@ STALE_STATE_AFTER, so a back-dated `_last_success` reproduces a long offline.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import logging
 from unittest.mock import Mock
 
 import aiohttp
@@ -24,7 +25,11 @@ from custom_components.eveus.const import (
     EVENT_CHARGING_STARTED,
     EVENT_SESSION_ENDED,
 )
-from custom_components.eveus.coordinator import STALE_STATE_AFTER, ChargerCoordinator
+from custom_components.eveus.coordinator import (
+    _SW_VERSION_MAX_ATTEMPTS,
+    STALE_STATE_AFTER,
+    ChargerCoordinator,
+)
 
 _ENTRY_ID = "e1"
 _ISSUE_ID = f"device_error_{_ENTRY_ID}"
@@ -32,6 +37,8 @@ _ISSUE_ID = f"device_error_{_ENTRY_ID}"
 
 class FakeCharger:
     """Minimal charger stub. get_status returns the prepared dict or raises."""
+
+    ip = "1.2.3.4"
 
     def __init__(self):
         self._data: dict = {}
@@ -41,8 +48,10 @@ class FakeCharger:
         self.sw_version: str | None = None
         # Mirrors ChargerV1: the real one swallows its own error and returns, so
         # a failed read is indistinguishable from a successful one except that
-        # sw_version stays None.
+        # sw_version stays None -- and, since the read learned to leave a trace,
+        # except that it records why.
         self.sw_version_found = "EnergyStar V5.23"
+        self.sw_version_error: str | None = None
 
     def set_data(self, data: dict) -> None:
         self._data = data
@@ -59,6 +68,8 @@ class FakeCharger:
     async def async_load_sw_version(self) -> None:
         self.sw_version_loads += 1
         self.sw_version = self.sw_version_found
+        if self.sw_version_found is None and self.sw_version_error is None:
+            self.sw_version_error = "ClientResponseError (HTTP 401)"
 
     def transform_data(self, raw):
         return raw
@@ -338,3 +349,53 @@ async def test_garbage_enum_frame_yields_unknown_without_an_issue(hass):
     assert data["aiStatus"] == "unknown"
     assert coord.last_update_success is True
     assert ir.async_get(hass).async_get_issue(DOMAIN, _ISSUE_ID) is None
+
+
+async def test_a_failed_version_read_is_named_once_when_the_retries_run_out(hass, caplog):
+    """The failure used to be perfectly silent, and that silence had a price.
+
+    Reproduced live on V1 2026-09-01: zero lines in `core`, and the cause could
+    not be established from the log at all -- 401, timeout and a changed footer
+    all looked identical. The first attempt is not the moment to speak: it can
+    be transient, the station's web server not up yet while /main already
+    answers. Giving up is.
+    """
+    coord = _make_coordinator(hass)
+    charger = coord.charger
+    charger.sw_version_found = None
+
+    with caplog.at_level(logging.WARNING):
+        for _ in range(_SW_VERSION_MAX_ATTEMPTS + 3):
+            await _poll_ok(coord, state="standby")
+
+    lines = [r.getMessage() for r in caplog.records
+             if "could not read the firmware version" in r.getMessage()]
+    assert len(lines) == 1, "a 30 s poll must not repeat this line forever"
+    assert "HTTP 401" in lines[0], "the reason is the whole point of the line"
+    assert charger.sw_version_loads == _SW_VERSION_MAX_ATTEMPTS
+
+
+async def test_a_generation_with_nothing_to_read_never_warns(hass, caplog):
+    """The false-positive guard, and the reason the warning is not keyed off
+    the counter alone.
+
+    BaseCharger.async_load_sw_version is a no-op: V2 reads its version from
+    /main via verFWMain, never through charger.sw_version. So the attempt
+    counter runs out on *every* V2 install, every start. Warning on exhaustion
+    alone would put a warning in every V2 user's log forever.
+    """
+    coord = _make_coordinator(hass)
+
+    async def _noop() -> None:
+        """BaseCharger.async_load_sw_version, verbatim: it attempts nothing."""
+        coord.charger.sw_version_loads += 1
+
+    coord.charger.async_load_sw_version = _noop
+
+    with caplog.at_level(logging.WARNING):
+        for _ in range(_SW_VERSION_MAX_ATTEMPTS + 3):
+            await _poll_ok(coord, state="standby")
+
+    assert coord._sw_version_loaded, "the counter did run out"
+    assert not [r for r in caplog.records
+                if "could not read the firmware version" in r.getMessage()]

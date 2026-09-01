@@ -189,3 +189,14 @@ def test_json_null_state_is_a_typeerror_not_a_valueerror():
     """
     out = _charger().transform_data({"state": None})
     assert out["state"] == "unknown"
+
+
+@pytest.mark.parametrize("garbage", [None, "", "abc", [], {}, float("nan")])
+def test_unparseable_time_msg_does_not_kill_the_poll(garbage):
+    """The clock flag was the one bare int() left in V2.
+
+    Garbage is not the "clock invalid" signal, so systemTime is decoded as
+    usual — the flag simply does not fire, exactly as timeMsg=0 does not.
+    """
+    out = _charger().transform_data({"systemTime": 1751884800, "timeMsg": garbage})
+    assert out["systemTime"] is not None

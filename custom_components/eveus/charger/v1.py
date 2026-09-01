@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 import re
 
-from .base import AI_MODE_MAP, BaseCharger, as_enum_int, blank_absent_temperature
+from .base import (
+    AI_MODE_MAP,
+    BaseCharger,
+    as_enum_int,
+    as_float,
+    blank_absent_temperature,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 # The station's own enum, read off the web UI it serves (EnergyStar V5.23) and
 # confirmed live on 2026-07-30: unplugged reads 12, a plugged car that is not
@@ -29,6 +38,9 @@ class ChargerV1(BaseCharger):
     # is no acknowledgement to check, so the HTTP status is all we have; the
     # coordinator's next poll is what actually confirms the new value.
     write_ack = None
+
+    # Set on the instance the first time a garbage numeric field is seen.
+    _warned_garbage_numeric = False
 
     async def set_enabled(self, enabled: bool) -> None:
         """Start charging. V1 cannot be stopped remotely — say so, don't pretend.
@@ -60,11 +72,42 @@ class ChargerV1(BaseCharger):
         """
         try:
             page = await self._request_text("GET", "/")
-        except Exception:  # a missing version must never break setup
+        except Exception as exc:  # a missing version must never break setup
+            status = getattr(exc, "status", None)
+            self.sw_version_error = (
+                f"{type(exc).__name__}"
+                + (f" (HTTP {status})" if status is not None else "")
+            )
             return
         match = re.search(r"EnergyStar\s*V[\d.]+", page)
-        if match:
-            self.sw_version = match.group(0)
+        if not match:
+            # The GET succeeded, so there is no exception to report — without
+            # this branch a changed footer stays as invisible as it was before
+            # this method recorded anything at all. The page itself is never
+            # stored: it carries the station's identifiers, and this value is
+            # surfaced in diagnostics.
+            self.sw_version_error = "version pattern not found in page"
+            return
+        self.sw_version = match.group(0)
+        self.sw_version_error = None
+
+    async def async_check_credentials(self) -> None:
+        """Probe the one handler that enforces Basic auth — see BaseCharger.
+
+        The base class withholds this check from generations whose auth path was
+        never measured. V1's now has been, twice on the same unit: GET / answers
+        401 without credentials and 200 with the correct ones, while POST /main
+        answers 200 to any password (2026-08-18, and again 2026-09-01 when the
+        owner's Reconfigure with the station's real web password made
+        `sw_version` appear as "EnergyStar V5.23" within one or two polls).
+
+        This matters more on V1 than on V2: `async_load_sw_version` above is the
+        integration's only call that needs authorisation at all, and it swallows
+        its own failure, so a wrong password shows up as nothing whatsoever — no
+        firmware row on the device page, no log line. The form is the one place
+        the user can still fix the input.
+        """
+        await self._request_text("GET", "/")
 
     async def sync_time(self) -> None:
         """Set the station's clock to Home Assistant's local wall clock.
@@ -114,16 +157,56 @@ class ChargerV1(BaseCharger):
             "sync_time",
         }
 
+    def _warn_once_on_garbage(self, raw: dict, numeric: dict) -> None:
+        """Name the bad fields once per charger, not once per poll.
+
+        A poll runs every 30-60 s; a station that starts emitting garbage would
+        otherwise fill the log with the same line forever. An absent key is not
+        garbage — only a key that is present and unparseable is reported.
+        """
+        if self._warned_garbage_numeric:
+            return
+        bad = [key for key, value in numeric.items() if value is None and key in raw]
+        if not bad:
+            return
+        self._warned_garbage_numeric = True
+        _LOGGER.warning(
+            "%s: unparseable numeric field(s) in /main, reported as unknown: %s",
+            self.ip,
+            ", ".join(f"{key}={raw[key]!r}" for key in bad),
+        )
+
     def transform_data(self, raw: dict) -> dict:
         raw = dict(raw)
-        # powerMeas = V × I × 0.1  (raw curMeas1 in 0.1A units)
-        v = int(raw.get("voltMeas1", 0))
-        i = int(raw.get("curMeas1", 0))
-        raw["powerMeas"] = round(v * i * 0.1, 1)
+        # A key is written only when there is a real number behind it. Writing
+        # 0.0 for an absent or unparseable field is worse than writing nothing:
+        # the sensor reports a confident zero, and every consumer that guards on
+        # `is not None` (SessionEnergySensor's last_reset, DailyEnergySensor's
+        # baseline, the coordinator's _live_energy) acts on it. Dropping the key
+        # instead lets sensor.py's .get(key) fold it to unknown.
+        numeric = {
+            key: as_float(raw.get(key))
+            for key in ("voltMeas1", "curMeas1", "sessionEnergy", "totalEnergy")
+        }
+        self._warn_once_on_garbage(raw, numeric)
+        volt = numeric["voltMeas1"]
+        cur = numeric["curMeas1"]  # 0.1 A units
+        # powerMeas = V × I × 0.1  (raw curMeas1 in 0.1A units), derived only
+        # when both factors are real
+        if volt is not None and cur is not None:
+            raw["powerMeas"] = round(volt * cur * 0.1, 1)
+        else:
+            raw.pop("powerMeas", None)
+        # voltMeas1 is not rescaled and stays pass-through when it parses — the
+        # guard only removes it when it does not, so the sensor reads unknown
+        # instead of a string or a fabricated zero.
+        if volt is None:
+            raw.pop("voltMeas1", None)
         # Scale raw integer values to real units
-        raw["curMeas1"] = round(int(raw.get("curMeas1", 0)) * 0.1, 1)
-        raw["sessionEnergy"] = round(int(raw.get("sessionEnergy", 0)) * 0.1, 3)
-        raw["totalEnergy"] = round(int(raw.get("totalEnergy", 0)) * 0.1, 3)
+        _set_or_drop(raw, "curMeas1", None if cur is None else round(cur * 0.1, 1))
+        for key in ("sessionEnergy", "totalEnergy"):
+            value = numeric[key]
+            _set_or_drop(raw, key, None if value is None else round(value * 0.1, 3))
         # Map enums to strings
         raw["state"] = V1_STATE_MAP.get(as_enum_int(raw.get("state", 0)), "unknown")
         raw["aiStatus"] = AI_MODE_MAP.get(as_enum_int(raw.get("aiStatus", 0)), "unknown")
@@ -146,3 +229,11 @@ class ChargerV1(BaseCharger):
             except ValueError:
                 raw["systemTime"] = None
         return raw
+
+
+def _set_or_drop(raw: dict, key: str, value) -> None:
+    """Write the key, or remove it entirely — never leave a None behind."""
+    if value is None:
+        raw.pop(key, None)
+    else:
+        raw[key] = value

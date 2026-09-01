@@ -54,6 +54,10 @@ def _patch_status(monkeypatch, *, exc=None, payload=None):
         "custom_components.eveus.charger.v2.ChargerV2.async_check_credentials",
         _credentials_ok,
     )
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v1.ChargerV1.async_check_credentials",
+        _credentials_ok,
+    )
 
 
 def _user_input(ip="1.2.3.4", model="v2", prefix=""):
@@ -120,11 +124,41 @@ async def test_user_invalid_auth_only_main_accepts_anything(hass, monkeypatch):
     assert result["errors"] == {"base": "invalid_auth"}
 
 
-async def test_user_v1_payload_is_not_credential_probed(hass, monkeypatch):
-    """V1 was never measured this way — probing it could make it unaddable.
+async def test_user_v1_wrong_password_is_rejected(hass, monkeypatch):
+    """V1 credentials are probed too — the premise that spared them is measured false.
 
-    A probe that answered 401 to a valid password would block adding the station
-    entirely, which is worse than not checking it.
+    This test replaces test_user_v1_payload_is_not_credential_probed, which
+    asserted the opposite on the grounds that "V1 was never measured this way".
+    It has been, twice on the same unit (2026-08-18, 2026-09-01): GET / answers
+    401 to a wrong password and 200 to the right one, exactly like V2. Skipping
+    the check cost more than it saved — async_load_sw_version is the only call
+    that needs authorisation, it swallows its own failure, so a wrong password
+    produced no firmware row and no log line, and the owner of this integration
+    hit it himself.
+    """
+    _patch_status(monkeypatch, payload=_V1_PAYLOAD)
+
+    async def _rejects(self):
+        raise aiohttp.ClientResponseError(_req(), (), status=401)
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v1.ChargerV1.async_check_credentials", _rejects
+    )
+
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _user_input(model="v1")
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_auth"}
+
+
+async def test_user_v1_empty_credentials_are_not_probed(hass, monkeypatch):
+    """A V1 station stays addable without credentials, even if GET / would 401.
+
+    The user gives up nothing but the firmware version: polling is POST /main,
+    which this firmware does not authenticate at all.
     """
     _patch_status(monkeypatch, payload=_V1_PAYLOAD)
     probed = []
@@ -134,7 +168,29 @@ async def test_user_v1_payload_is_not_credential_probed(hass, monkeypatch):
         raise aiohttp.ClientResponseError(_req(), (), status=401)
 
     monkeypatch.setattr(
-        "custom_components.eveus.charger.v2.ChargerV2.async_check_credentials", _rejects
+        "custom_components.eveus.charger.v1.ChargerV1.async_check_credentials", _rejects
+    )
+
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {**_user_input(model="v1"), CONF_USERNAME: "", CONF_PASSWORD: ""},
+    )
+
+    assert not probed, "empty credentials must not be probed on V1 either"
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+async def test_user_v1_correct_password_passes(hass, monkeypatch):
+    """The probe must let a valid password through, not just reject a bad one."""
+    _patch_status(monkeypatch, payload=_V1_PAYLOAD)
+    probed = []
+
+    async def _accepts(self):
+        probed.append(1)
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v1.ChargerV1.async_check_credentials", _accepts
     )
 
     result = await _start_user(hass)
@@ -142,8 +198,37 @@ async def test_user_v1_payload_is_not_credential_probed(hass, monkeypatch):
         result["flow_id"], _user_input(model="v1")
     )
 
-    assert not probed, "a V1 payload must not be credential-probed"
+    assert probed, "a V1 station with credentials must be probed"
     assert result["type"] == FlowResultType.CREATE_ENTRY
+
+
+async def test_v2_station_picked_as_v1_reports_mismatch_not_auth(hass, monkeypatch):
+    """model_mismatch must keep beating invalid_auth once V1 has a real probe.
+
+    Before V1 gained one, this held by accident: the gate read the V2 payload
+    signal, and ChargerV1.async_check_credentials was a no-op. A naive widening
+    ("model is v1 and username is set") would make a V2 station picked as "v1"
+    fail as invalid_auth and hide the actual mistake.
+    """
+    _patch_status(monkeypatch, payload=_V2_PAYLOAD)   # a V2 station...
+    probed = []
+
+    async def _rejects(self):
+        probed.append(1)
+        raise aiohttp.ClientResponseError(_req(), (), status=401)
+
+    monkeypatch.setattr(
+        "custom_components.eveus.charger.v1.ChargerV1.async_check_credentials", _rejects
+    )
+
+    result = await _start_user(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _user_input(model="v1")     # ...picked as V1
+    )
+
+    assert not probed, "a mismatched generation must not be credential-probed"
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "model_mismatch"}
 
 
 async def test_empty_credentials_are_not_probed(hass, monkeypatch):
