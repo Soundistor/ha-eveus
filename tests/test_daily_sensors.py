@@ -125,6 +125,53 @@ def test_daily_energy_survives_a_lifetime_counter_reset(clock):
     assert sensor._attr_last_reset == last_reset, "a counter reset is not a new day"
 
 
+def test_daily_energy_small_rollback_that_stays_above_the_baseline(clock):
+    """Measured live 2026-08-18: totalEnergy came back 0.5 kWh lower (272.5 after
+    273.0). That is NOT the counter reset the two tests above cover — it never
+    crosses the baseline, so the rebase branch (sensor.py) is not entered at all.
+
+    Pins the current behaviour: a transient dip of exactly the rollback, then a
+    clean recovery. Never negative, never a jump.
+    """
+    sensor, coord = _make(DailyEnergySensor)
+    _update(sensor, coord, totalEnergy=250.0)    # baseline for the day
+    _update(sensor, coord, totalEnergy=273.0)
+    assert sensor.native_value == 23.0
+    baseline = sensor._baseline
+
+    _update(sensor, coord, totalEnergy=272.5)    # the live rollback
+    assert sensor.native_value == 22.5, "the dip is the rollback, nothing more"
+    assert sensor._baseline == baseline, "no rebase — the baseline was never crossed"
+
+    _update(sensor, coord, totalEnergy=273.2)
+    assert sensor.native_value == 23.2, "recovers on the next healthy frame"
+
+
+def test_daily_energy_small_rollback_that_dips_under_the_baseline(clock):
+    """The same rollback early in the day, when it is bigger than what the day
+    has accumulated — so it DOES cross the baseline and takes the rebase branch
+    written for a full counter reset.
+
+    Pins the current behaviour rather than asserting a desired one: the day
+    never goes negative and never freezes, but the rebase treats the rollback as
+    a reset and the day keeps the 0.3 kWh it never earned. That over-count is a
+    separate finding, not this item's fix.
+    """
+    sensor, coord = _make(DailyEnergySensor)
+    _update(sensor, coord, totalEnergy=100.0)    # baseline for the day
+    _update(sensor, coord, totalEnergy=100.2)
+    assert sensor.native_value == 0.2
+
+    _update(sensor, coord, totalEnergy=99.9)     # rollback of 0.3, day had 0.2
+    assert sensor.native_value == 0.2, "the day holds, it must not go negative"
+    assert sensor._baseline == 99.7
+
+    _update(sensor, coord, totalEnergy=100.4)
+    # True gain since the day started is 0.4 (100.0 -> 100.4). The rebase has
+    # folded the 0.3 rollback into the day.
+    assert sensor.native_value == 0.7
+
+
 async def test_daily_energy_keeps_the_day_across_a_reset_and_restart(hass, clock):
     """The rebase must not need a field that is never persisted.
 
