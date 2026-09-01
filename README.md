@@ -182,10 +182,17 @@ The integration fires events on the Home Assistant bus at charging-session trans
 
 | Event | Fired when | Data |
 |-------|-----------|------|
-| `eveus_charging_started` | The charger enters the charging state (including resume from pause) | `entry_id`, `device_name` |
-| `eveus_session_ended` | A session finishes (leaves the charging/paused states) | `entry_id`, `device_name`, `energy_kwh`, `duration_s`, `ended_state`, `ended_at` |
+| `eveus_charging_started` | The charger enters the charging state (including resume from pause), or a new session is detected while the reported state never left charging | `entry_id`, `device_name` |
+| `eveus_session_ended` | A session finishes: the charger leaves the charging/paused states, or its session counter drops back to zero while the state is still active | `entry_id`, `device_name`, `energy_kwh`, `duration_s`, `ended_state`, `ended_at` |
 
 The energy and duration in `eveus_session_ended` are the final session values captured just before the charger resets its counters for the next session — the same figures the `last_session_*` sensors keep.
+
+**Sessions cut short by a power cut.** A charger that loses power mid-session boots straight back into charging, so its reported state never changes and there is no transition to detect. The integration treats the session counter returning to zero as the session boundary instead, and reports the interrupted session rather than losing it. Two things to know when you filter on this event:
+
+- `ended_state` then carries the state the charger is in at the moment of detection, which may be an **active** state such as `charging` — this field never carried an active state before;
+- `ended_at` is the moment of **detection**, not the moment the session actually died. After a long outage the two differ by hours.
+
+This covers the charger losing power. An outage that also takes Home Assistant down restarts the integration, and the interrupted session cannot be recovered.
 
 ## Localizations
 
