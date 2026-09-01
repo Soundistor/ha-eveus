@@ -15,7 +15,7 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .charger.base import BaseCharger
+from .charger.base import BaseCharger, as_float
 from .const import (
     DOMAIN,
     EVENT_CHARGING_STARTED,
@@ -249,15 +249,53 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self.charger.sw_version_error,
                 )
 
+    def _end_session(self, ended_state, base) -> None:
+        """Publish the session that just ended and drop the live figures."""
+        self.last_session = {
+            "energy_kwh": self._live_energy,
+            "duration_s": self._live_time,
+            "ended_state": ended_state,
+            "ended_at": dt_util.utcnow().isoformat(),
+        }
+        self.hass.bus.async_fire(EVENT_SESSION_ENDED, {**base, **self.last_session})
+        self._live_energy = None
+        self._live_time = None
+
     def _process_session_events(self, data) -> None:
         new_state = data.get("state")
+        base = {"entry_id": self._entry_id, "device_name": self._device_name}
+        latched_start = False
 
         if new_state in SESSION_ACTIVE_STATES:
             # The firmware wipes sessionEnergy/sessionTime the moment the next
             # session starts, so capture the last values seen while active —
             # they are the only reliable final figures for the ended session.
-            se = data.get("sessionEnergy")
+            # sessionEnergy is coerced here rather than compared raw: V2's
+            # transform_data passes it through untouched, so a non-numeric value
+            # would otherwise settle into _live_energy and make the comparison
+            # below raise on the *next* poll — one bad field turning into
+            # UpdateFailed for everything.
+            se = as_float(data.get("sessionEnergy"))
             st = data.get("sessionTime")
+
+            # A session counter back at exactly zero while the state is still
+            # active is a session boundary the state machine never showed. It is
+            # what a power cut looks like from here: the station boots straight
+            # back into charging, so session_transition("charging", "charging")
+            # is None and nothing latched — while the capture below would
+            # overwrite the old figures with the new session's zero. Measured on
+            # V2 2026-09-01: 12.901 kWh vanished this way.
+            # Exactly zero, not "any drop": a reboot always restarts the counter
+            # at zero, and a small rollback (observed on totalEnergy) never
+            # reaches it — so the rule does not depend on whether the station can
+            # decrease sessionEnergy mid-session. The `> 0` guard keeps a session
+            # that was interrupted before its first tenth of a kWh from latching
+            # a zero over a meaningful previous value.
+            if se == 0 and self._live_energy is not None and self._live_energy > 0:
+                self._end_session(new_state, base)
+                self.hass.bus.async_fire(EVENT_CHARGING_STARTED, base)
+                latched_start = True
+
             if se is not None:
                 self._live_energy = se
             if st is not None:
@@ -265,18 +303,13 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if self._prev_state is not None:
             event = session_transition(self._prev_state, new_state)
-            base = {"entry_id": self._entry_id, "device_name": self._device_name}
             if event == "charging_started":
-                self.hass.bus.async_fire(EVENT_CHARGING_STARTED, base)
+                # paused -> charging with a zeroed counter latches above AND
+                # transitions here; firing twice would break the started/ended
+                # pairing this very fix exists to keep.
+                if not latched_start:
+                    self.hass.bus.async_fire(EVENT_CHARGING_STARTED, base)
             elif event == "session_ended":
-                self.last_session = {
-                    "energy_kwh": self._live_energy,
-                    "duration_s": self._live_time,
-                    "ended_state": new_state,
-                    "ended_at": dt_util.utcnow().isoformat(),
-                }
-                self.hass.bus.async_fire(EVENT_SESSION_ENDED, {**base, **self.last_session})
-                self._live_energy = None
-                self._live_time = None
+                self._end_session(new_state, base)
 
         self._prev_state = new_state
