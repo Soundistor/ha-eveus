@@ -66,6 +66,24 @@ class ChargerV1(BaseCharger):
         if match:
             self.sw_version = match.group(0)
 
+    async def async_check_credentials(self) -> None:
+        """Probe the one handler that enforces Basic auth — see BaseCharger.
+
+        The base class withholds this check from generations whose auth path was
+        never measured. V1's now has been, twice on the same unit: GET / answers
+        401 without credentials and 200 with the correct ones, while POST /main
+        answers 200 to any password (2026-08-18, and again 2026-09-01 when the
+        owner's Reconfigure with the station's real web password made
+        `sw_version` appear as "EnergyStar V5.23" within one or two polls).
+
+        This matters more on V1 than on V2: `async_load_sw_version` above is the
+        integration's only call that needs authorisation at all, and it swallows
+        its own failure, so a wrong password shows up as nothing whatsoever — no
+        firmware row on the device page, no log line. The form is the one place
+        the user can still fix the input.
+        """
+        await self._request_text("GET", "/")
+
     async def sync_time(self) -> None:
         """Set the station's clock to Home Assistant's local wall clock.
 
