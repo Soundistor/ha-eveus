@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from math import isfinite
 
 import aiohttp
 
@@ -48,6 +49,25 @@ def as_enum_int(value):
         return int(value)
     except (TypeError, ValueError, OverflowError):
         return None
+
+
+def as_float(value):
+    """float() for a measurement, or None when the raw value cannot be one.
+
+    The numeric counterpart of as_enum_int. Two failure modes, both wrong
+    before this existed: a missing key fell back to the .get() default and the
+    sensor confidently reported 0.0 instead of unknown; a present-but-null key
+    raised out of transform_data and turned one bad field into UpdateFailed for
+    the whole poll.
+
+    nan/inf are rejected too — they survive float() but poison every consumer
+    downstream (comparisons against a baseline silently go false).
+    """
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return result if isfinite(result) else None
 
 
 class BaseCharger:

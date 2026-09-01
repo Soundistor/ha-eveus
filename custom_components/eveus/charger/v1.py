@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 import re
 
-from .base import AI_MODE_MAP, BaseCharger, as_enum_int, blank_absent_temperature
+from .base import (
+    AI_MODE_MAP,
+    BaseCharger,
+    as_enum_int,
+    as_float,
+    blank_absent_temperature,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 # The station's own enum, read off the web UI it serves (EnergyStar V5.23) and
 # confirmed live on 2026-07-30: unplugged reads 12, a plugged car that is not
@@ -29,6 +38,9 @@ class ChargerV1(BaseCharger):
     # is no acknowledgement to check, so the HTTP status is all we have; the
     # coordinator's next poll is what actually confirms the new value.
     write_ack = None
+
+    # Set on the instance the first time a garbage numeric field is seen.
+    _warned_garbage_numeric = False
 
     async def set_enabled(self, enabled: bool) -> None:
         """Start charging. V1 cannot be stopped remotely — say so, don't pretend.
@@ -132,16 +144,56 @@ class ChargerV1(BaseCharger):
             "sync_time",
         }
 
+    def _warn_once_on_garbage(self, raw: dict, numeric: dict) -> None:
+        """Name the bad fields once per charger, not once per poll.
+
+        A poll runs every 30-60 s; a station that starts emitting garbage would
+        otherwise fill the log with the same line forever. An absent key is not
+        garbage — only a key that is present and unparseable is reported.
+        """
+        if self._warned_garbage_numeric:
+            return
+        bad = [key for key, value in numeric.items() if value is None and key in raw]
+        if not bad:
+            return
+        self._warned_garbage_numeric = True
+        _LOGGER.warning(
+            "%s: unparseable numeric field(s) in /main, reported as unknown: %s",
+            self.ip,
+            ", ".join(f"{key}={raw[key]!r}" for key in bad),
+        )
+
     def transform_data(self, raw: dict) -> dict:
         raw = dict(raw)
-        # powerMeas = V × I × 0.1  (raw curMeas1 in 0.1A units)
-        v = int(raw.get("voltMeas1", 0))
-        i = int(raw.get("curMeas1", 0))
-        raw["powerMeas"] = round(v * i * 0.1, 1)
+        # A key is written only when there is a real number behind it. Writing
+        # 0.0 for an absent or unparseable field is worse than writing nothing:
+        # the sensor reports a confident zero, and every consumer that guards on
+        # `is not None` (SessionEnergySensor's last_reset, DailyEnergySensor's
+        # baseline, the coordinator's _live_energy) acts on it. Dropping the key
+        # instead lets sensor.py's .get(key) fold it to unknown.
+        numeric = {
+            key: as_float(raw.get(key))
+            for key in ("voltMeas1", "curMeas1", "sessionEnergy", "totalEnergy")
+        }
+        self._warn_once_on_garbage(raw, numeric)
+        volt = numeric["voltMeas1"]
+        cur = numeric["curMeas1"]  # 0.1 A units
+        # powerMeas = V × I × 0.1  (raw curMeas1 in 0.1A units), derived only
+        # when both factors are real
+        if volt is not None and cur is not None:
+            raw["powerMeas"] = round(volt * cur * 0.1, 1)
+        else:
+            raw.pop("powerMeas", None)
+        # voltMeas1 is not rescaled and stays pass-through when it parses — the
+        # guard only removes it when it does not, so the sensor reads unknown
+        # instead of a string or a fabricated zero.
+        if volt is None:
+            raw.pop("voltMeas1", None)
         # Scale raw integer values to real units
-        raw["curMeas1"] = round(int(raw.get("curMeas1", 0)) * 0.1, 1)
-        raw["sessionEnergy"] = round(int(raw.get("sessionEnergy", 0)) * 0.1, 3)
-        raw["totalEnergy"] = round(int(raw.get("totalEnergy", 0)) * 0.1, 3)
+        _set_or_drop(raw, "curMeas1", None if cur is None else round(cur * 0.1, 1))
+        for key in ("sessionEnergy", "totalEnergy"):
+            value = numeric[key]
+            _set_or_drop(raw, key, None if value is None else round(value * 0.1, 3))
         # Map enums to strings
         raw["state"] = V1_STATE_MAP.get(as_enum_int(raw.get("state", 0)), "unknown")
         raw["aiStatus"] = AI_MODE_MAP.get(as_enum_int(raw.get("aiStatus", 0)), "unknown")
@@ -164,3 +216,11 @@ class ChargerV1(BaseCharger):
             except ValueError:
                 raw["systemTime"] = None
         return raw
+
+
+def _set_or_drop(raw: dict, key: str, value) -> None:
+    """Write the key, or remove it entirely — never leave a None behind."""
+    if value is None:
+        raw.pop(key, None)
+    else:
+        raw[key] = value

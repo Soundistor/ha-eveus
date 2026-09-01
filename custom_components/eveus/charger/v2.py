@@ -108,7 +108,7 @@ class ChargerV2(BaseCharger):
         # decoded at all, or time_drift reports a huge fake offset instead of
         # unknown.
         sys_time = raw.get("systemTime")
-        if int(raw.get("timeMsg", 0)) == 1:
+        if as_enum_int(raw.get("timeMsg", 0)) == 1:
             raw["systemTime"] = None
         elif sys_time:
             try:
