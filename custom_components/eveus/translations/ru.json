@@ -161,29 +161,6 @@
           "unknown": "Неизвестно"
         }
       },
-      "charge_reason": {
-        "name": "Причина состояния заряда",
-        "state": {
-          "cost_limit": "Лимит стоимости",
-          "energy_limit": "Лимит энергии",
-          "external_limit": "Внешнее управление током",
-          "limited_by_user": "Ограничено пользователем",
-          "paused_by_adaptive_mode": "Ток снижен адаптивным режимом",
-          "schedule1_energy_limit": "Лимит энергии расписания 1",
-          "schedule1_limit": "Лимит расписания 1",
-          "schedule2_energy_limit": "Лимит энергии расписания 2",
-          "schedule2_limit": "Лимит расписания 2",
-          "time_limit": "Лимит времени",
-          "charging": "Заряжается",
-          "starting_up": "Запуск",
-          "cable_not_connected": "Кабель не подключён",
-          "charge_complete": "Заряд завершён",
-          "error": "Ошибка",
-          "waiting_for_car": "Ожидает автомобиль",
-          "paused": "Приостановлено",
-          "unknown": "Неизвестно"
-        }
-      },
       "v_bat": { "name": "Напряжение батареи" },
       "rssi": { "name": "Сигнал Wi-Fi" },
       "iem1": { "name": "Счётчик энергии 1" },

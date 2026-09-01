@@ -40,33 +40,6 @@ _SUBSTATE_OPTIONS = list(
 ) + ["unknown"]
 _AI_STATUS_OPTIONS = list(dict.fromkeys(AI_MODE_MAP.values())) + ["unknown"]
 
-# Charge Reason falls back to the state when no limit is asserted. This is a
-# hand-written parallel table to V2_STATE_MAP, which is exactly what the item
-# forbids for the limit map -- but the mapping is not the identity (standby ->
-# cable_not_connected), so it cannot be derived. The drift is caught by an
-# assert in tests/test_charge_reason.py instead: every V2_STATE_MAP value except
-# "error" must be a key here. KB-02 keeps "paused" in the queue to be renamed to
-# the vendor's own word, "disabled", and after such a rename this table would
-# silently fall through to "unknown".
-_STATE_FALLBACK = {
-    "charging": "charging",
-    "startup": "starting_up",
-    "system_test": "starting_up",
-    "standby": "cable_not_connected",
-    "charge_complete": "charge_complete",
-    "connected": "waiting_for_car",
-    "paused": "paused",
-}
-
-# 10 from the limit map (no_limits is never emitted -- it falls through to the
-# state) + 8 of our own. Built by formula so the two halves cannot drift apart.
-_CHARGE_REASON_OPTIONS = sorted(
-    set(V2_SUBSTATE_LIMIT_MAP.values()) - {"no_limits"}
-) + [
-    "charging", "starting_up", "cable_not_connected", "charge_complete",
-    "error", "waiting_for_car", "paused", "unknown",
-]
-
 # name = lowercase key — определяет entity_id как {platform}.{prefix}_{name}
 SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     SensorEntityDescription(
@@ -217,19 +190,6 @@ _ADAPTIVE_CURRENT_DESCRIPTION = SensorEntityDescription(
     icon="mdi:brain",
 )
 
-# name is the lowercase key, not the human name: unique_id is built from
-# description.name (entity.py), so a display string here would be baked into the
-# registry id forever. The human name lives in strings.json.
-_CHARGE_REASON_DESCRIPTION = SensorEntityDescription(
-    key="charge_reason",
-    name="charge_reason",
-    translation_key="charge_reason",
-    icon="mdi:help-circle-outline",
-    device_class=SensorDeviceClass.ENUM,
-    options=_CHARGE_REASON_OPTIONS,
-    entity_category=EntityCategory.DIAGNOSTIC,
-)
-
 # No state_class: long-term statistics for clock drift are useless noise
 _TIME_DRIFT_DESCRIPTION = SensorEntityDescription(
     key="systemTime",
@@ -285,8 +245,6 @@ async def async_setup_entry(
         entities.append(DailySessionTimeSensor(coordinator, charger, prefix, entry.entry_id))
     if "aiModecurrent" in charger.capabilities:
         entities.append(AdaptiveCurrentSensor(coordinator, charger, _ADAPTIVE_CURRENT_DESCRIPTION, prefix, entry.entry_id))
-    if "subState" in charger.capabilities:
-        entities.append(ChargeReasonSensor(coordinator, charger, _CHARGE_REASON_DESCRIPTION, prefix, entry.entry_id))
     if "systemTime" in charger.capabilities:
         entities.append(TimeDriftSensor(coordinator, charger, _TIME_DRIFT_DESCRIPTION, prefix, entry.entry_id))
     if "sessionEnergy" in charger.capabilities:
@@ -327,61 +285,6 @@ class AdaptiveCurrentSensor(ChargerSensor):
         if self.coordinator.data.get("aiStatus") in (None, "off"):
             return None
         return self.coordinator.data.get(self.entity_description.key)
-
-
-class ChargeReasonSensor(ChargerSensor):
-    """One answer to "why is the charge not running, or not at the current I asked for".
-
-    subState first, state second. The firmware reports exactly one subState at a
-    time (KB-02 §2.10), having already collapsed simultaneous gates by its own
-    precedence, so folding to a single reason loses nothing against the API --
-    we only repeat what the station decided.
-
-    Reading state first is what the previous design did, and it was backwards:
-    subState is meaningful under ANY state, and only state == 7 switches which
-    table it indexes (KB-02 §2.1). Measured live 2026-09-01, a command stop gave
-    subState 1 (limited_by_user) together with state 5 (charge_complete) -- a
-    state-first rule answers "Charge Complete" right after the user pressed
-    stop. KB-02 is blunt about it: state is the unreliable half.
-
-    Two of the limit codes do not stop the charge at all (adaptive throttling,
-    external control). They are still reported while charging: the value reads
-    as "why is the current not what you asked for", and which authority holds
-    the current is visible nowhere else.
-    """
-
-    @property
-    def native_value(self):
-        data = self.coordinator.data
-        if not data:
-            return None
-        state = data.get("state")
-        # state == "error" <=> transform_data mapped subState through the ERROR
-        # table (v2.py), so this branch must come first: it is the only thing
-        # keeping the two code spaces out of one options list.
-        if state == "error":
-            return "error"
-        sub = data.get("subState")
-        if sub not in ("no_limits", "unknown", None):
-            return sub
-        if sub == "unknown":
-            # Which authority holds the charge is unknown; the state does not
-            # substitute for that.
-            return "unknown"
-        return _STATE_FALLBACK.get(state, "unknown")
-
-    @property
-    def extra_state_attributes(self):
-        """The error name, and only in the error branch.
-
-        Expanding the 15 error codes into options would merge two unrelated code
-        spaces -- KB-02 calls a flat single-table mapping wrong -- and the name
-        is already visible on both the state and sub-state sensors.
-        """
-        data = self.coordinator.data
-        if data and data.get("state") == "error":
-            return {"error": data.get("subState")}
-        return None
 
 
 class TimeDriftSensor(ChargerSensor):

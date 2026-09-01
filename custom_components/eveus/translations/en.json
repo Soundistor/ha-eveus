@@ -161,29 +161,6 @@
           "unknown": "Unknown"
         }
       },
-      "charge_reason": {
-        "name": "Charge Reason",
-        "state": {
-          "cost_limit": "Cost Limit",
-          "energy_limit": "Energy Limit",
-          "external_limit": "External Limit",
-          "limited_by_user": "Limited by User",
-          "paused_by_adaptive_mode": "Limited by Adaptive Mode",
-          "schedule1_energy_limit": "Schedule 1 Energy Limit",
-          "schedule1_limit": "Schedule 1 Limit",
-          "schedule2_energy_limit": "Schedule 2 Energy Limit",
-          "schedule2_limit": "Schedule 2 Limit",
-          "time_limit": "Time Limit",
-          "charging": "Charging",
-          "starting_up": "Starting Up",
-          "cable_not_connected": "Cable Not Connected",
-          "charge_complete": "Charge Complete",
-          "error": "Error",
-          "waiting_for_car": "Waiting for Car",
-          "paused": "Paused",
-          "unknown": "Unknown"
-        }
-      },
       "v_bat": { "name": "Battery Voltage" },
       "rssi": { "name": "Wi-Fi Signal" },
       "iem1": { "name": "Energy Meter 1" },

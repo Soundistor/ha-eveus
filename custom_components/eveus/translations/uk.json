@@ -161,29 +161,6 @@
           "unknown": "Невідомо"
         }
       },
-      "charge_reason": {
-        "name": "Причина стану заряду",
-        "state": {
-          "cost_limit": "Ліміт вартості",
-          "energy_limit": "Ліміт енергії",
-          "external_limit": "Зовнішнє керування струмом",
-          "limited_by_user": "Обмежено користувачем",
-          "paused_by_adaptive_mode": "Струм знижено адаптивним режимом",
-          "schedule1_energy_limit": "Ліміт енергії розкладу 1",
-          "schedule1_limit": "Ліміт розкладу 1",
-          "schedule2_energy_limit": "Ліміт енергії розкладу 2",
-          "schedule2_limit": "Ліміт розкладу 2",
-          "time_limit": "Ліміт часу",
-          "charging": "Заряджається",
-          "starting_up": "Запуск",
-          "cable_not_connected": "Кабель не під'єднано",
-          "charge_complete": "Заряд завершено",
-          "error": "Помилка",
-          "waiting_for_car": "Очікує автомобіль",
-          "paused": "Призупинено",
-          "unknown": "Невідомо"
-        }
-      },
       "v_bat": { "name": "Напруга батареї" },
       "rssi": { "name": "Сигнал Wi-Fi" },
       "iem1": { "name": "Лічильник енергії 1" },
