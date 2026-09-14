@@ -597,7 +597,7 @@
       'attributes': ReadOnlyDict({
         'device_class': 'energy',
         'friendly_name': 'Eveus 1.2.3.4 Total Energy',
-        'state_class': <SensorStateClass.TOTAL_INCREASING: 'total_increasing'>,
+        'state_class': <SensorStateClass.TOTAL: 'total'>,
         'unit_of_measurement': 'kWh',
       }),
       'context': <ANY>,
@@ -1349,7 +1349,7 @@
       'attributes': ReadOnlyDict({
         'device_class': 'energy',
         'friendly_name': 'Eveus 1.2.3.4 Total Energy',
-        'state_class': <SensorStateClass.TOTAL_INCREASING: 'total_increasing'>,
+        'state_class': <SensorStateClass.TOTAL: 'total'>,
         'unit_of_measurement': 'kWh',
       }),
       'context': <ANY>,

@@ -98,9 +98,21 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     ),
     # sessionEnergy handled by SessionEnergySensor below (needs last_reset tracking)
     SensorEntityDescription(
+        # TOTAL, not TOTAL_INCREASING: the station loses whatever kWh it had not
+        # flushed to flash when it restarts, so the lifetime counter really does
+        # step backwards (measured 2026-09-03: 78.5 -> 77.9). TOTAL_INCREASING
+        # reads a step down as a counter reset and adds the whole reading to the
+        # long-term sum as fresh consumption — measured 2026-09-10, ~120 kWh of
+        # consumption that never happened. With TOTAL the dip is subtracted and
+        # heals itself on the next frame.
+        #
+        # IEM1/IEM2 below deliberately stay TOTAL_INCREASING: they are the trip
+        # meters, the one thing TOTAL_INCREASING is actually designed for — it
+        # reads their reset as a new cycle and keeps the accumulated sum, while
+        # TOTAL would subtract the whole meter from it.
         key="totalEnergy", name="totalenergy", translation_key="total_energy",
         native_unit_of_measurement="kWh", device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.TOTAL,
     ),
     SensorEntityDescription(
         key="systemTime", name="systemtime", translation_key="system_time",
