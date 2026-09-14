@@ -59,6 +59,21 @@ STALE_STATE_AFTER = timedelta(minutes=15)
 # value back and undoes what the user just did on screen. Wait this long first.
 WRITE_SETTLE = timedelta(seconds=3)
 
+# Counters that only ever grow, short of a reset the user asked for. A step down
+# in any of them is either the station dropping an unflushed tail after a
+# restart, or the counter not being loaded from flash yet — both measured on V1.
+# sessionEnergy is deliberately NOT here: it legitimately falls to zero at the
+# start of every session, and the power-cut latch in _process_session_events is
+# built on exactly that zero.
+LIFETIME_COUNTERS = ("totalEnergy", "IEM1", "IEM2")
+
+# How many consecutive frames must agree before a lower reading is believed.
+# One frame is not enough (a reboot frame reads 0 and the next reads the real
+# value again), and waiting is not free either: the station can lose a tail to
+# flash permanently, and a guard that never believes a lower value would freeze
+# the sensor until the counter climbed back past the old maximum.
+COUNTER_CONFIRM_FRAMES = 2
+
 # How many polls may try to fetch the firmware version before giving up until
 # the next reload. V2 reports it in /main and never gets here; V1 needs a GET
 # that can fail exactly when the station has only just come back up.
@@ -106,6 +121,13 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._live_time = None
         self.last_session = None
         self._setpoint_dropped = 0
+        self._counter_dropped = 0
+        # RAM only, and knowingly so: after an HA restart the first frame is
+        # believed whatever it says. Persisting it would buy the one case where
+        # a blackout takes the station and HA together — a real gap, but not
+        # worth a stored baseline that can itself go stale.
+        self._last_counter: dict[str, float] = {}
+        self._counter_low_streak: dict[str, int] = {}
 
     @callback
     def schedule_refresh_after_write(self) -> None:
@@ -167,11 +189,68 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             del data["currentSet"]
 
+    def _drop_unconfirmed_counter_drops(self, data: dict[str, Any]) -> None:
+        """Hold back a lifetime counter that stepped down, until it repeats.
+
+        Two measured ways these counters go backwards, and they need the same
+        treatment for different reasons:
+
+          * the counter is not loaded from flash yet — 2026-09-10 on V1,
+            totalEnergy read 0 and the real 119.8 came back one minute later;
+          * the station dropped a tail it had not flushed — 2026-09-03,
+            78.5 -> 77.9, and that one does NOT come back.
+
+        Publishing either is expensive. `DailyEnergySensor` reads a value under
+        its baseline as a counter reset and rebases, which turns a day's delta
+        into the whole lifetime reading — measured, 134 kWh in a day on a 4.2 kW
+        station. Long-term statistics keep whatever they were handed.
+
+        So: hold a lower reading back, and believe it once a second frame in a
+        row also reads low. The reboot zero dies on the first frame and never
+        confirms; a permanent loss confirms on the next poll and the counter
+        carries on from there instead of freezing until it climbs back.
+
+        A 12 h continuous run on both stations (2026-09-13, ~24 900 samples at
+        2 s) saw exactly one step down, straight after a gap and with the
+        station reporting no_data — and none at all during uninterrupted
+        polling, which is what makes a bare two-frame rule enough and a
+        tolerance band unnecessary.
+        """
+        for key in LIFETIME_COUNTERS:
+            value = as_float(data.get(key))
+            if value is None:
+                continue
+            last = self._last_counter.get(key)
+            if last is None or value >= last:
+                self._last_counter[key] = value
+                self._counter_low_streak[key] = 0
+                continue
+
+            streak = self._counter_low_streak.get(key, 0) + 1
+            if streak >= COUNTER_CONFIRM_FRAMES:
+                # Confirmed by repetition: a real reset, or a tail the station
+                # is never getting back. Believe it and carry on from here.
+                self._last_counter[key] = value
+                self._counter_low_streak[key] = 0
+                continue
+
+            self._counter_low_streak[key] = streak
+            self._counter_dropped += 1
+            _LOGGER.warning(
+                "Holding back %s=%s: below the last known %s and not yet "
+                "confirmed by a second frame",
+                key,
+                value,
+                last,
+            )
+            del data[key]
+
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             raw = await self.charger.get_status()
             data = self.charger.transform_data(raw)
             self._drop_implausible_setpoint(data)
+            self._drop_unconfirmed_counter_drops(data)
             # V1 reports systemTime as a naive wall-clock time-of-day; localize it
             # to an absolute instant using HA's configured timezone (not the host
             # OS tz). V2 resolves its own offset in transform_data and hands us an

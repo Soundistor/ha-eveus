@@ -37,4 +37,8 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: EveusCo
         # fired, and one that climbs during normal operation means it is eating
         # legitimate values.
         "setpoint_dropped": coordinator._setpoint_dropped,
+        # Same reasoning for the lifetime counters: a held-back frame is
+        # invisible in the entity, so the count is the only way to tell "never
+        # fired" from "firing on every poll".
+        "counter_dropped": coordinator._counter_dropped,
     }

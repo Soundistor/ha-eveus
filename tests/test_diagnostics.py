@@ -39,6 +39,7 @@ def entry_fixture():
         _sw_version_attempts=3,
         _sw_version_loaded=True,
         _setpoint_dropped=2,
+        _counter_dropped=1,
     )
     return SimpleNamespace(
         data=dict(_CONFIG_SENTINELS),
@@ -74,6 +75,7 @@ async def test_debugging_fields_survive(entry):
     # normal operation is the only way to notice it eating legitimate values —
     # the drop itself is invisible in the entity, which just reads unknown.
     assert out["setpoint_dropped"] == 2
+    assert out["counter_dropped"] == 1
 
 
 async def test_why_the_version_read_failed_is_recoverable(entry):
