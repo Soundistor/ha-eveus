@@ -105,6 +105,7 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._live_energy = None
         self._live_time = None
         self.last_session = None
+        self._setpoint_dropped = 0
 
     @callback
     def schedule_refresh_after_write(self) -> None:
@@ -119,10 +120,58 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _refresh_now(self, _now) -> None:
         await self.async_request_refresh()
 
+    def _drop_implausible_setpoint(self, data: dict[str, Any]) -> None:
+        """Drop a currentSet the station cannot legally have sent.
+
+        The first frame after the station restarts carries values it has not
+        loaded from flash yet. Measured 2026-09-10 on V1: currentSet read 0 in
+        the same frame that read totalEnergy 0, then 12 a minute later, then 20.
+        Zero is not a low setpoint, it is an impossible one — the station's
+        service page offers 6/7/8 as the minimum and nothing below it can be
+        selected.
+
+        The floor is the generation constant, deliberately NOT
+        `number.native_min_value`: that one reads `minCurrent` out of this same
+        frame, and whether `minCurrent` survives a reboot frame has never been
+        measured (on V1 the key does not exist at all). The constant is the
+        lowest value the service page offers, so it is lenient — a station
+        configured to 8 A still passes a 7 — but never wrong.
+
+        Why a transient is worth dropping: the setpoint is control state, not a
+        readout. Every automation that steps the current reads it first, so a
+        zero either fails their conditions or becomes the base for the next
+        step, and both failures are silent — a skipped condition or a template
+        error, neither of which reaches the log.
+
+        Only the low side is checked. `curDesign` bounds the top and comes out
+        of the same suspect frame, so guarding against it would reintroduce the
+        dependency this method exists to avoid.
+        """
+        value = data.get("currentSet")
+        if value is None:
+            return
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            # Non-numeric garbage is a different problem with a different fix;
+            # this guard is about a value that parses and is still impossible.
+            return
+        if numeric < self.charger.min_current:
+            self._setpoint_dropped += 1
+            _LOGGER.warning(
+                "Dropping implausible currentSet %s: below the %s A minimum "
+                "this generation can be set to. The station is most likely "
+                "still loading it from flash after a restart",
+                value,
+                self.charger.min_current,
+            )
+            del data["currentSet"]
+
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             raw = await self.charger.get_status()
             data = self.charger.transform_data(raw)
+            self._drop_implausible_setpoint(data)
             # V1 reports systemTime as a naive wall-clock time-of-day; localize it
             # to an absolute instant using HA's configured timezone (not the host
             # OS tz). V2 resolves its own offset in transform_data and hands us an

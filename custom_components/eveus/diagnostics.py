@@ -31,4 +31,10 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: EveusCo
             "gave_up": coordinator._sw_version_loaded
             and coordinator.charger.sw_version is None,
         },
+        # Data the station really sent and we refused to publish. Dropping it
+        # silently is the same behaviour we hold against the firmware, so it
+        # leaves a trace: a count that never moves means the guard has never
+        # fired, and one that climbs during normal operation means it is eating
+        # legitimate values.
+        "setpoint_dropped": coordinator._setpoint_dropped,
     }

@@ -39,6 +39,9 @@ class FakeCharger:
     """Minimal charger stub. get_status returns the prepared dict or raises."""
 
     ip = "1.2.3.4"
+    # Every real charger has it (BaseCharger property); the setpoint guard
+    # reads it on every poll that carries a currentSet.
+    min_current = 6
 
     def __init__(self):
         self._data: dict = {}
