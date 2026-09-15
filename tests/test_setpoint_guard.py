@@ -13,11 +13,16 @@ test is there so that "tightening" it against the frame goes red.
 """
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 
 import pytest
 
-from custom_components.eveus.coordinator import WRITE_SETTLE, ChargerCoordinator
+from custom_components.eveus.coordinator import (
+    STALE_STATE_AFTER,
+    WRITE_SETTLE,
+    ChargerCoordinator,
+)
 
 
 class _Charger:
@@ -180,3 +185,37 @@ async def test_nan_is_never_called_plausible(hass):
     # separately in TODO.md.
     assert coord._setpoint_dropped == 0
     assert data["currentSet"] != data["currentSet"]   # still nan, untouched
+
+
+async def test_a_confirmed_low_does_not_disarm_the_guard(hass, freezer):
+    coord = _coordinator(hass, 7)
+
+    # The station legitimately sits at 6 and, after a poll interval, is shown.
+    await _poll(coord, state="charging", currentSet=6)
+    freezer.tick(coord.update_interval)
+    assert (await _poll(coord, state="charging", currentSet=6))["currentSet"] == 6
+
+    # Hours later it restarts and the first frame carries the unloaded zero.
+    freezer.tick(timedelta(minutes=5))
+    held = await _poll(coord, state="charging", currentSet=0)
+
+    # Without rebasing on the confirmed value, the streak and the timestamp
+    # stayed "long past the threshold" forever, so this zero confirmed on its
+    # first frame and went straight to the automations — the guard switching
+    # itself off the first time a station legitimately sat below the minimum.
+    assert "currentSet" not in held
+
+
+async def test_a_long_outage_does_not_carry_evidence_across_it(hass, freezer):
+    coord = _coordinator(hass, 7)
+
+    await _poll(coord, state="charging", currentSet=20)
+    await _poll(coord, state="charging", currentSet=0)      # first low frame
+    freezer.tick(STALE_STATE_AFTER + timedelta(minutes=1))  # station gone
+    held = await _poll(coord, state="charging", currentSet=0)
+
+    # The frame before the outage and the frame after it are two unrelated
+    # events — most likely a pre-gap anomaly and a boot artefact from the very
+    # restart that caused the gap. The elapsed-interval test passes on
+    # arithmetic here and fails on meaning, so the evidence is dropped.
+    assert "currentSet" not in held

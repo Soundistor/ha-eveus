@@ -21,7 +21,11 @@ import logging
 from homeassistant.util import dt as dt_util
 import pytest
 
-from custom_components.eveus.coordinator import WRITE_SETTLE, ChargerCoordinator
+from custom_components.eveus.coordinator import (
+    STALE_STATE_AFTER,
+    WRITE_SETTLE,
+    ChargerCoordinator,
+)
 import custom_components.eveus.sensor as sensor_mod
 from custom_components.eveus.sensor import DailyEnergySensor
 
@@ -211,3 +215,20 @@ async def test_the_first_frame_after_a_restart_is_believed(hass):
     # blackout that takes the station and HA together — is known and accepted.
     assert frame["totalEnergy"] == 12.0
     assert coord._counter_dropped == 0
+
+
+async def test_a_long_outage_does_not_carry_counter_evidence_across_it(hass, freezer):
+    coord = _coordinator(hass)
+
+    await _poll(coord, totalEnergy=119.8)
+    await _poll(coord, totalEnergy=0)                       # first low frame
+    freezer.tick(STALE_STATE_AFTER + timedelta(minutes=1))  # station gone
+    held = await _poll(coord, totalEnergy=0)
+
+    # Same reasoning as the setpoint guard: the frame before the outage and the
+    # frame after it are two unrelated events, and the elapsed-interval test
+    # would pass on arithmetic while failing on meaning. Less dangerous here
+    # than for the setpoint — a wrong confirmation rebases _last_counter and so
+    # does not repeat — but pinned, because the reset clears both guards and
+    # only one half was covered.
+    assert "totalEnergy" not in held

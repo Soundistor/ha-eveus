@@ -141,6 +141,9 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._counter_low_since: dict[str, datetime] = {}
         self._setpoint_low_streak = 0
         self._setpoint_low_since: datetime | None = None
+        # The lowest value confirmed as "the station really sits here", so a
+        # further drop below it still has to prove itself.
+        self._setpoint_floor: float | None = None
 
     @callback
     def schedule_refresh_after_write(self) -> None:
@@ -154,6 +157,31 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _refresh_now(self, _now) -> None:
         await self.async_request_refresh()
+
+    def _forget_stale_guard_evidence(self) -> None:
+        """Drop half-finished guard evidence from before a long gap.
+
+        Both guards confirm a reading by seeing it again after a real poll
+        interval. A first low frame from before an outage and a low frame from
+        after it are not that: they are two unrelated events, most likely a
+        pre-gap anomaly and a boot artefact from the very restart that caused
+        the gap. The elapsed-interval test would pass on arithmetic — the gap
+        is minutes or hours — while failing on meaning, and confirm the new
+        reading on its first frame.
+
+        Runs BEFORE the guards, unlike the sibling reset of `_prev_state`
+        further down `_async_update_data`: that one only has to be right by the
+        time session events are processed, this one has to be right for the
+        frame being guarded right now.
+        """
+        if self._last_success is None:
+            return
+        if dt_util.utcnow() - self._last_success <= STALE_STATE_AFTER:
+            return
+        self._setpoint_low_streak = 0
+        self._setpoint_low_since = None
+        self._counter_low_streak.clear()
+        self._counter_low_since.clear()
 
     def _drop_implausible_setpoint(self, data: dict[str, Any]) -> None:
         """Drop a currentSet the station cannot legally have sent.
@@ -203,6 +231,18 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # still impossible.
             return
         if value >= self.charger.min_current:
+            # Back in the normal range: forget everything, including a low
+            # value confirmed earlier.
+            self._setpoint_floor = None
+            self._setpoint_low_streak = 0
+            self._setpoint_low_since = None
+            return
+
+        floor = self._setpoint_floor
+        if floor is not None and value >= floor:
+            # Already-confirmed territory: the station has been sitting here
+            # and the user has seen it. Do not make it prove the same value
+            # over and over.
             self._setpoint_low_streak = 0
             self._setpoint_low_since = None
             return
@@ -221,7 +261,15 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ):
             # Not a boot artefact: the station is really sitting there. Publish
             # it, and stop warning — the user needs to see the value to act on
-            # it.
+            # it. Rebase on the confirmed value, exactly as the counter guard
+            # rebases _last_counter: without this the streak and the timestamp
+            # stay "long past the threshold" forever, so the NEXT drop — a real
+            # boot zero hours later — confirms on its first frame and reaches
+            # the automations untouched. The guard would switch itself off the
+            # first time a station legitimately sat below the minimum.
+            self._setpoint_floor = value
+            self._setpoint_low_streak = 0
+            self._setpoint_low_since = None
             return
 
         self._setpoint_dropped += 1
@@ -308,6 +356,7 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             raw = await self.charger.get_status()
             data = self.charger.transform_data(raw)
+            self._forget_stale_guard_evidence()
             self._drop_implausible_setpoint(data)
             self._drop_unconfirmed_counter_drops(data)
             # V1 reports systemTime as a naive wall-clock time-of-day; localize it
