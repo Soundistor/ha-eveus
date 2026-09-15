@@ -461,7 +461,15 @@ class DailyEnergySensor(ChargerSensor, RestoreEntity):
     def _handle_coordinator_update(self) -> None:
         total = self.coordinator.data.get("totalEnergy") if self.coordinator.data else None
         today = dt_util.now().date()
-        if self._current_date != today:
+        if self._current_date != today and total is not None:
+            # Only roll the day over on a frame that actually carries a
+            # reading. Rolling over on `total is None` left _baseline None
+            # while _computed still held yesterday's figure, and the next
+            # frame's rebase branch then set baseline = total - yesterday,
+            # so the new day started already loaded with yesterday's kWh.
+            # Frames without totalEnergy used to be vanishingly rare; the
+            # coordinator's counter guard makes them a normal outcome, so the
+            # rollover waits for a reading instead. The delay is one poll.
             self._baseline = total
             self._current_date = today
             self._attr_last_reset = dt_util.start_of_local_day()

@@ -15,13 +15,13 @@ sensor freezes until the counter climbs back past its old maximum.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 from homeassistant.util import dt as dt_util
 import pytest
 
-from custom_components.eveus.coordinator import ChargerCoordinator
+from custom_components.eveus.coordinator import WRITE_SETTLE, ChargerCoordinator
 import custom_components.eveus.sensor as sensor_mod
 from custom_components.eveus.sensor import DailyEnergySensor
 
@@ -54,7 +54,10 @@ class _Charger:
 
 @pytest.fixture(autouse=True)
 def _clock(monkeypatch):
-    monkeypatch.setattr(sensor_mod.dt_util, "now", lambda: _DAY)
+    """Local date the daily sensor sees. Mutable so a test can cross midnight."""
+    box = [_DAY]
+    monkeypatch.setattr(sensor_mod.dt_util, "now", lambda: box[0])
+    return box
 
 
 def _coordinator(hass) -> ChargerCoordinator:
@@ -106,11 +109,12 @@ async def test_a_small_rollback_adds_no_energy_that_never_happened(hass):
     assert sensor.native_value == 0.4
 
 
-async def test_a_counter_that_stays_low_is_believed(hass):
+async def test_a_counter_that_stays_low_is_believed(hass, freezer):
     coord = _coordinator(hass)
 
     await _poll(coord, totalEnergy=119.8)
     await _poll(coord, totalEnergy=0)                      # held back
+    freezer.tick(coord.update_interval)
     second = await _poll(coord, totalEnergy=0)             # confirmed
 
     # A real reset, or a tail the station is never getting back. Refusing it
@@ -119,14 +123,48 @@ async def test_a_counter_that_stays_low_is_believed(hass):
     assert coord._counter_dropped == 1
 
 
-async def test_a_permanent_loss_costs_exactly_one_frame(hass):
+async def test_two_frames_three_seconds_apart_do_not_confirm(hass, freezer):
+    coord = _coordinator(hass)
+
+    await _poll(coord, totalEnergy=119.8)
+    await _poll(coord, totalEnergy=0)
+    freezer.tick(WRITE_SETTLE)                             # a write-triggered poll
+    still_held = await _poll(coord, totalEnergy=0)
+
+    # Every write to number/switch/select schedules a poll WRITE_SETTLE later,
+    # and Force Refresh fires one immediately. Counting frames alone let two
+    # reads 3 s apart confirm a zero, while the station's boot window is far
+    # longer than that — so the guard would rebase on exactly the reading it
+    # exists to refuse. Confirmation has to span a real poll interval.
+    assert "totalEnergy" not in still_held
+
+
+async def test_a_permanent_loss_costs_exactly_one_frame(hass, freezer):
     coord = _coordinator(hass)
 
     await _poll(coord, totalEnergy=78.5)
     await _poll(coord, totalEnergy=77.9)                   # held back
+    freezer.tick(coord.update_interval)
     resumed = await _poll(coord, totalEnergy=78.0)         # still low -> believed
 
     assert resumed["totalEnergy"] == 78.0
+
+
+async def test_the_day_rolls_over_only_on_a_frame_with_a_reading(hass, _clock):
+    coord = _coordinator(hass)
+    sensor = _daily(coord)
+
+    await _poll(coord, sensor, totalEnergy=100.0)          # baseline, day N
+    await _poll(coord, sensor, totalEnergy=100.5)          # day N gained 0.5
+
+    _clock[0] = _DAY + timedelta(days=1)
+    await _poll(coord, sensor, totalEnergy=0)              # held back, crosses midnight
+    await _poll(coord, sensor, totalEnergy=100.6)          # first real frame of day N+1
+
+    # Rolling over on a frame with no reading left _baseline None while
+    # _computed still held yesterday's 0.5, and the rebase branch then set
+    # baseline = total - 0.5 — so the new day opened already holding 0.5.
+    assert sensor.native_value == 0.0
 
 
 async def test_session_energy_is_not_guarded(hass):

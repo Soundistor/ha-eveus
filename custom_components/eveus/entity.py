@@ -53,7 +53,12 @@ class EveusEntity(CoordinatorEntity):
         # station offline — which, for this device, is the normal way to start.
         # The next successful poll writes it back (coordinator), but until then
         # the page shows nothing.
+        # Falsy, not `is not None`: an empty string is what a frame of padding
+        # (`verFWMain: "  "`) leaves after the strip, and writing that would
+        # erase a good stored version just as None would. The coordinator's own
+        # write path already tests it this way — the two must not disagree
+        # about what counts as "no version".
         version = firmware_version(self.coordinator.data, self._charger)
-        if version is not None:
+        if version:
             info["sw_version"] = version
         return info

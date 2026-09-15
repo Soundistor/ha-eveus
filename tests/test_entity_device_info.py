@@ -50,3 +50,11 @@ def test_main_wins_over_the_fallback():
     charger.sw_version = "EnergyStar V5.23"
     info = _device_info({"verFWMain": "GRM070A-R3.02.9 "}, charger)
     assert info["sw_version"] == "GRM070A-R3.02.9"
+
+
+def test_a_padded_empty_version_is_not_written():
+    # firmware_version strips, so `verFWMain: "  "` arrives here as "". Writing
+    # that erases a good stored version exactly as None would, and the
+    # coordinator's own write path already treats it as "no version" — the two
+    # routes into the registry must not disagree about what counts as empty.
+    assert "sw_version" not in _device_info({"verFWMain": "   "})

@@ -17,7 +17,7 @@ import logging
 
 import pytest
 
-from custom_components.eveus.coordinator import ChargerCoordinator
+from custom_components.eveus.coordinator import WRITE_SETTLE, ChargerCoordinator
 
 
 class _Charger:
@@ -70,9 +70,9 @@ async def test_the_next_real_frame_passes_immediately(hass):
     await _poll(coord, state="charging", currentSet=0)
     data = await _poll(coord, state="charging", currentSet=20)
 
-    # No confirmation window, no waiting for a second frame to agree: the
-    # guard's whole point is that it needs no memory. A mutation that adds
-    # N-of-M confirmation here has to make this red.
+    # The moment a plausible value arrives it publishes — no settling, no
+    # waiting out the streak that the held frame started. Only a value that
+    # stays below the floor has to earn its way back.
     assert data["currentSet"] == 20
     assert coord._setpoint_dropped == 1
 
@@ -121,3 +121,62 @@ async def test_non_numeric_is_left_alone(hass):
     # that parses and is still impossible.
     assert data["currentSet"] == "garbage"
     assert coord._setpoint_dropped == 0
+
+
+async def test_a_station_really_sitting_below_the_minimum_is_shown(hass, freezer, caplog):
+    coord = _coordinator(hass, 7)
+
+    await _poll(coord, state="charging", currentSet=6)
+    freezer.tick(coord.update_interval)
+    with caplog.at_level(logging.WARNING):
+        shown = await _poll(coord, state="charging", currentSet=6)
+        await _poll(coord, state="charging", currentSet=6)
+
+    # A V1 really can sit at 6: its own UI accepts >= 6 on read while the
+    # slider starts at 7, the firmware range-checks nothing (KB-03 BUG-13), and
+    # a garbage write leaves currentSet at 0 until someone writes again — on a
+    # station other people can reach. Refusing it forever would replace the
+    # value with `unknown` and repeat a "still loading from flash" warning
+    # every poll about a restart that never happened.
+    assert shown["currentSet"] == 6
+    assert coord._setpoint_dropped == 1
+    # Exactly one warning, from the frame that was actually held — not one per
+    # poll for as long as the station stays there. Before the streak existed
+    # this was ~1440 identical lines a day, each blaming a restart.
+    assert caplog.text.count("Holding back currentSet") == 1
+
+
+async def test_a_write_triggered_poll_cannot_confirm_a_boot_zero(hass, freezer):
+    coord = _coordinator(hass, 7)
+
+    await _poll(coord, state="charging", currentSet=0)
+    freezer.tick(WRITE_SETTLE)
+    still_held = await _poll(coord, state="charging", currentSet=0)
+
+    # Writing to number/switch/select schedules a poll WRITE_SETTLE later, so
+    # frames alone would confirm the boot zero in 3 s and hand it to every
+    # automation that uses the setpoint as its base.
+    assert "currentSet" not in still_held
+
+
+async def test_nan_is_never_called_plausible(hass):
+    coord = _coordinator(hass, 7)
+
+    data = await _poll(coord, state="charging", currentSet=float("nan"))
+
+    # Two halves, and only the first is this guard's job.
+    #
+    # nan survives float() and compares False against everything, so the first
+    # implementation ran `nan < min_current`, got False, and concluded the
+    # setpoint was plausible — actively blessing it. Parsing with as_float (the
+    # helper the counter guard already used, written to reject nan/inf for
+    # exactly this reason) removes that claim: the guard now says nothing about
+    # the value.
+    #
+    # It still reaches the entity, and that is deliberate scope: dropping
+    # unparseable values is garbage handling, which this item excluded, and on
+    # V2 a nan reached the entity before any of this existed — so removing it
+    # here would be a new behaviour smuggled in under a guard. Tracked
+    # separately in TODO.md.
+    assert coord._setpoint_dropped == 0
+    assert data["currentSet"] != data["currentSet"]   # still nan, untouched

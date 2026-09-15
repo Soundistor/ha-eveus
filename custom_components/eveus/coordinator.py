@@ -74,6 +74,16 @@ LIFETIME_COUNTERS = ("totalEnergy", "IEM1", "IEM2")
 # the sensor until the counter climbed back past the old maximum.
 COUNTER_CONFIRM_FRAMES = 2
 
+# Same idea for the setpoint, and needed for the same reason in reverse: a
+# station can genuinely sit below the generation minimum. V1's own UI accepts
+# >= 6 on read while its slider starts at 7, the firmware range-checks nothing
+# (KB-03 BUG-13), and a garbage write leaves currentSet at 0 until someone
+# writes again (KB-04 §3.2) — on a station other people can reach. Without a
+# streak the guard would hide that state forever behind `unknown` and repeat a
+# "still loading from flash" warning every poll for a restart that never
+# happened, which is the opposite of showing the user what the station is doing.
+SETPOINT_CONFIRM_FRAMES = 2
+
 # How many polls may try to fetch the firmware version before giving up until
 # the next reload. V2 reports it in /main and never gets here; V1 needs a GET
 # that can fail exactly when the station has only just come back up.
@@ -128,6 +138,9 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # worth a stored baseline that can itself go stale.
         self._last_counter: dict[str, float] = {}
         self._counter_low_streak: dict[str, int] = {}
+        self._counter_low_since: dict[str, datetime] = {}
+        self._setpoint_low_streak = 0
+        self._setpoint_low_since: datetime | None = None
 
     @callback
     def schedule_refresh_after_write(self) -> None:
@@ -168,26 +181,59 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Only the low side is checked. `curDesign` bounds the top and comes out
         of the same suspect frame, so guarding against it would reintroduce the
         dependency this method exists to avoid.
+
+        And only a *transient* one. A station can genuinely hold a value below
+        the generation minimum — V1's own UI accepts >= 6 on read while its
+        slider starts at 7, the firmware range-checks nothing (KB-03 BUG-13),
+        and a garbage write leaves currentSet at 0 until someone writes again
+        (KB-04 §3.2), on a station other people can reach. Refusing that state
+        forever would replace it with `unknown` and repeat a "still loading
+        from flash" warning every poll about a restart that never happened —
+        hiding what the station is doing instead of showing it. So the same
+        rule as the counters: after SETPOINT_CONFIRM_FRAMES frames in a row it
+        is believed.
         """
-        value = data.get("currentSet")
+        # as_float, not float(): nan survives float() and then compares False
+        # against everything, so it would pass this check and poison every
+        # automation that uses the setpoint as its base.
+        value = as_float(data.get("currentSet"))
         if value is None:
+            # Missing, or non-numeric garbage — a different problem with a
+            # different fix. This guard is about a value that parses and is
+            # still impossible.
             return
-        try:
-            numeric = float(value)
-        except (TypeError, ValueError):
-            # Non-numeric garbage is a different problem with a different fix;
-            # this guard is about a value that parses and is still impossible.
+        if value >= self.charger.min_current:
+            self._setpoint_low_streak = 0
+            self._setpoint_low_since = None
             return
-        if numeric < self.charger.min_current:
-            self._setpoint_dropped += 1
-            _LOGGER.warning(
-                "Dropping implausible currentSet %s: below the %s A minimum "
-                "this generation can be set to. The station is most likely "
-                "still loading it from flash after a restart",
-                value,
-                self.charger.min_current,
-            )
-            del data["currentSet"]
+
+        now = dt_util.utcnow()
+        self._setpoint_low_streak += 1
+        if self._setpoint_low_since is None:
+            self._setpoint_low_since = now
+        # Over a real poll interval, for the same reason as the counter guard:
+        # a write schedules an extra poll 3 s later, and confirming on that one
+        # would publish the boot zero to every automation that reads the
+        # setpoint — the breakage this guard exists to prevent.
+        if (
+            self._setpoint_low_streak >= SETPOINT_CONFIRM_FRAMES
+            and now - self._setpoint_low_since >= self.update_interval
+        ):
+            # Not a boot artefact: the station is really sitting there. Publish
+            # it, and stop warning — the user needs to see the value to act on
+            # it.
+            return
+
+        self._setpoint_dropped += 1
+        _LOGGER.warning(
+            "Holding back currentSet %s: below the %s A minimum this "
+            "generation can be set to, and not yet confirmed by a second "
+            "frame. Most likely the station is still loading it from flash "
+            "after a restart",
+            value,
+            self.charger.min_current,
+        )
+        del data["currentSet"]
 
     def _drop_unconfirmed_counter_drops(self, data: dict[str, Any]) -> None:
         """Hold back a lifetime counter that stepped down, until it repeats.
@@ -224,14 +270,27 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if last is None or value >= last:
                 self._last_counter[key] = value
                 self._counter_low_streak[key] = 0
+                self._counter_low_since.pop(key, None)
                 continue
 
+            now = dt_util.utcnow()
             streak = self._counter_low_streak.get(key, 0) + 1
-            if streak >= COUNTER_CONFIRM_FRAMES:
-                # Confirmed by repetition: a real reset, or a tail the station
-                # is never getting back. Believe it and carry on from here.
+            since = self._counter_low_since.setdefault(key, now)
+            # Confirmation has to span a real poll interval, not just a second
+            # frame. Any write to number/switch/select schedules an extra poll
+            # WRITE_SETTLE (3 s) later and the Force Refresh button fires one
+            # immediately, so counting frames alone lets two reads 3 s apart
+            # confirm a zero — and the station's boot window is longer than
+            # that (measured 2026-09-10: 0 at 07:00:37, the real value at
+            # 07:01:37, so the window is somewhere under ~120 s and certainly
+            # over 3). Believing it then would rebase on exactly the reading
+            # this guard exists to refuse.
+            if streak >= COUNTER_CONFIRM_FRAMES and now - since >= self.update_interval:
+                # Confirmed by repetition over time: a real reset, or a tail
+                # the station is never getting back. Carry on from here.
                 self._last_counter[key] = value
                 self._counter_low_streak[key] = 0
+                self._counter_low_since.pop(key, None)
                 continue
 
             self._counter_low_streak[key] = streak
