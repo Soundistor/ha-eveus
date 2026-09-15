@@ -249,3 +249,48 @@ async def test_sw_version_is_written_to_the_registry_only_once(
         await hass.async_block_till_done()
 
     assert writes == ["GRM070A-R3.05.4"], writes
+
+
+@pytest.mark.parametrize(
+    ("model", "stored_version"),
+    [("v2", "GRM070A-R3.05.4"), ("v1", "EnergyStar V5.23")],
+)
+async def test_an_offline_start_keeps_the_version_already_in_the_registry(
+    hass, unreachable, model, stored_version
+):
+    """The other half of the version story, and the one that erased data.
+
+    The test above covers a device row with nothing in it yet. This one starts
+    from a row that already knows its version — the normal state after the
+    station has been seen once — and restarts while the station is offline.
+
+    device_info used to send sw_version=None in that case, and the registry
+    reads an explicit None as "erase", not as "nothing to say". Both routes are
+    covered because they fill the field from different places: V2 reads
+    verFWMain out of the frame, V1 off the page it serves, and only the V2 one
+    had a test.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "ip_address": "1.2.3.4",
+            "model": model,
+            "username": "admin",
+            "password": "secret",
+            "device_prefix": "offline",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    registry = dr.async_get(hass)
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        sw_version=stored_version,
+    )
+
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    device = registry.async_get_device(identifiers={(DOMAIN, entry.entry_id)})
+    assert device.sw_version == stored_version

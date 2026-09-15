@@ -31,7 +31,11 @@ def test_sw_version_is_stripped():
 
 @pytest.mark.parametrize("data", [{}, None])
 def test_sw_version_missing(data):
-    assert _device_info(data)["sw_version"] is None
+    # Absent, not None. The registry treats an explicit None as "erase the
+    # stored version"; leaving the key out is what tells it to keep what it
+    # has. This assert is the mutation test for that — putting the key back
+    # unconditionally makes it fail.
+    assert "sw_version" not in _device_info(data)
 
 
 def test_sw_version_falls_back_to_the_charger():

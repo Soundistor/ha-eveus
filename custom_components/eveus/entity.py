@@ -38,11 +38,22 @@ class EveusEntity(CoordinatorEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
+        info = DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
             name=self._device_name,
             manufacturer="Eveus",
             model=self._charger.model_name,
-            sw_version=firmware_version(self.coordinator.data, self._charger),
             configuration_url=f"http://{self._charger.ip}",
         )
+        # The key goes in only when there is a version to put there. DeviceInfo
+        # is a total=False TypedDict and the registry reads the two cases
+        # differently: an absent key means "leave whatever is stored", an
+        # explicit None means "erase it". Always sending the second wiped a
+        # known version off the device page on every start that found the
+        # station offline — which, for this device, is the normal way to start.
+        # The next successful poll writes it back (coordinator), but until then
+        # the page shows nothing.
+        version = firmware_version(self.coordinator.data, self._charger)
+        if version is not None:
+            info["sw_version"] = version
+        return info
