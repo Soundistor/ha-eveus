@@ -5,7 +5,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 
 from .charger.v1 import ChargerV1
 from .charger.v2 import ChargerV2
@@ -83,6 +83,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: EveusConfigEntry) -> boo
         hass.services.async_register(DOMAIN, "set_ai_mode", async_set_ai_mode)
 
     return True
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    config_entry: EveusConfigEntry,
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Let the user delete a device row this entry has outgrown.
+
+    The identifier scheme changed twice — IP first, then entry_id — and neither
+    change migrated the registry, so one station ends up owning several rows:
+    measured 2026-09-03, five rows for two stations, the live ones unnamed and
+    the ones the owner had named long dead.
+
+    Adopting an old row is not available: async_update_device(new_identifiers=)
+    raises DeviceIdentifierCollisionError when the target identifiers already
+    belong to a row, which is exactly this situation, and HA has no way to merge
+    two rows. So the offer is to delete, and only the user can make it — the
+    dead row carries their name and area, which no tombstone brings back.
+
+    Without this function the core shows no Delete button at all, and the only
+    way out is hand-editing .storage.
+
+    The predicate is the whole safety argument: anything that is not this
+    entry's current identifier may go, and the live row cannot be deleted by
+    construction rather than by a heuristic that could drift.
+    """
+    return (DOMAIN, config_entry.entry_id) not in device_entry.identifiers
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: EveusConfigEntry) -> bool:
