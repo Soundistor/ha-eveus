@@ -239,36 +239,92 @@ async def test_daily_energy_restore_stale_day_ignored(hass, clock, monkeypatch):
 
 def test_daily_session_time_accumulates(clock):
     sensor, coord = _make(DailySessionTimeSensor)
-    _update(sensor, coord, sessionTime=100)   # baseline this day
-    _update(sensor, coord, sessionTime=3700)  # +3600s = 1h
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0)   # baseline this day
+    _update(sensor, coord, sessionTime=3700, curMeas1=16.0)  # +3600s = 1h
     assert sensor.native_value == 1.0
-    _update(sensor, coord, sessionTime=3700)  # no change
+    _update(sensor, coord, sessionTime=3700, curMeas1=16.0)  # no change
     assert sensor.native_value == 1.0
 
 
 def test_daily_session_time_new_session_negative_delta(clock):
     sensor, coord = _make(DailySessionTimeSensor)
-    _update(sensor, coord, sessionTime=100)
-    _update(sensor, coord, sessionTime=3700)   # +3600 -> 1h
-    _update(sensor, coord, sessionTime=30)     # new session (reset) -> negative delta ignored
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0)
+    _update(sensor, coord, sessionTime=3700, curMeas1=16.0)  # +3600 -> 1h
+    # new session (reset) -> negative delta ignored
+    _update(sensor, coord, sessionTime=30, curMeas1=16.0)
     assert sensor._accumulated == 3600.0
-    _update(sensor, coord, sessionTime=1830)   # +1800 from the new session
+    _update(sensor, coord, sessionTime=1830, curMeas1=16.0)  # +1800 from the new session
     assert sensor._accumulated == 5400.0
     assert sensor.native_value == 1.5
 
 
 def test_daily_session_time_cross_midnight_split(clock):
     sensor, coord = _make(DailySessionTimeSensor)
-    _update(sensor, coord, sessionTime=0)      # session starts, baseline
-    _update(sensor, coord, sessionTime=3600)   # +1h on day D
+    # session starts, baseline
+    _update(sensor, coord, sessionTime=0, curMeas1=16.0)
+    _update(sensor, coord, sessionTime=3600, curMeas1=16.0)  # +1h on day D
     assert sensor.native_value == 1.0
 
     clock["now"] = _NEXT_DAY
-    _update(sensor, coord, sessionTime=7200)   # rollover: reset, prev re-anchored
+    # rollover: reset, prev re-anchored
+    _update(sensor, coord, sessionTime=7200, curMeas1=16.0)
     assert sensor.native_value == 0.0
-    _update(sensor, coord, sessionTime=9000)   # +1800s = 0.5h on day D+1
+    _update(sensor, coord, sessionTime=9000, curMeas1=16.0)  # +1800s = 0.5h on day D+1
     assert sensor.native_value == 0.5
     assert sensor._current_date == _NEXT_DAY.date()
+
+
+# The gate: sessionTime is session duration, not charging time. Measured
+# 2026-09-22 under a time limit (.claude/ralph/timelimit-v2-2026-09-22.log:13-20)
+# — state=5, curMeas1=0, counter running 1:1 while sessionEnergy stayed frozen.
+
+def test_daily_session_time_ignores_a_standing_car_in_charge_complete(clock):
+    """The 2026-09-20 shape: state=5, zero current, counter still climbing."""
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=12249, curMeas1=16.0, state=4)
+    _update(sensor, coord, sessionTime=13929, curMeas1=0, state=5)
+    assert sensor._accumulated == 0.0, "1680 s of standing must not count as charging"
+    # prev still moved, so the next charging frame bills only its own interval
+    _update(sensor, coord, sessionTime=14529, curMeas1=16.0, state=4)
+    assert sensor._accumulated == 600.0
+
+
+def test_daily_session_time_ignores_zero_current_inside_state_4(clock):
+    """The same defect without a terminal state — the gate cannot be on state."""
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=1220, curMeas1=16.0, state=4)
+    _update(sensor, coord, sessionTime=1264, curMeas1=0, state=4)
+    assert sensor._accumulated == 0.0
+
+
+def test_daily_session_time_skips_a_frame_without_a_current_reading(clock):
+    """Unknown is not the same as flowing: no reading, no delta."""
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0)
+    _update(sensor, coord, sessionTime=200)               # key absent
+    assert sensor._accumulated == 0.0
+    _update(sensor, coord, sessionTime=300, curMeas1=None)  # present but null
+    assert sensor._accumulated == 0.0
+    _update(sensor, coord, sessionTime=400, curMeas1=float("nan"))
+    assert sensor._accumulated == 0.0
+    # every one of those frames still moved _prev
+    assert sensor._prev == 400
+    _update(sensor, coord, sessionTime=500, curMeas1=16.0)
+    assert sensor._accumulated == 100.0
+
+
+def test_daily_session_time_current_drops_to_zero_within_one_sample(clock):
+    """Why the threshold is strictly > 0 and not a small number.
+
+    In the measured transition curMeas1 and powerMeas both reached 0 in a
+    single sample, so there is no intermediate band to tolerate.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=1000, curMeas1=9.6)
+    _update(sensor, coord, sessionTime=1030, curMeas1=9.6)
+    assert sensor._accumulated == 30.0
+    _update(sensor, coord, sessionTime=1060, curMeas1=0)
+    assert sensor._accumulated == 30.0, "the interval ending at zero amps is not charging"
 
 
 # --------------------------------------------------------------------------- #

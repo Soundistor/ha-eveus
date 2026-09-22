@@ -17,6 +17,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 from homeassistant.util import dt as dt_util
 
+from .charger.base import as_float
 from .charger.v1 import V1_STATE_MAP, ChargerV1
 from .charger.v2 import (
     AI_MODE_MAP,
@@ -567,8 +568,28 @@ class DailySessionTimeSensor(ChargerSensor, RestoreEntity):
             self._attr_last_reset = dt_util.start_of_local_day()
         elif current is not None and self._prev is not None:
             delta = current - self._prev
-            if delta > 0:
+            # sessionTime is the session's wall-clock duration, not charging
+            # time. It keeps ticking 1:1 at zero amps — measured under both an
+            # energy and a time limit (KB-02 §3.3.1, §3.3.3), and inside plain
+            # state=4 as well, so the gate is on current and NOT on state. A
+            # session even opens ~25 s before any current flows (§1.1.5), so
+            # neither sessionStarted nor state=4 means charging.
+            #
+            # curMeas1 is the primary field: on V1 powerMeas is derived from it.
+            # Strictly > 0, no numeric threshold: in the measured transition
+            # current and power both reached 0 within one sample. as_float
+            # returns None for a missing, null or nan reading — unknown is not
+            # the same as flowing, so such a frame contributes nothing.
+            #
+            # The whole interval is attributed by the sample that ends it, so
+            # accuracy is +/- one poll at every transition. Accepted.
+            amps = as_float(self.coordinator.data.get("curMeas1"))
+            if delta > 0 and amps is not None and amps > 0:
                 self._accumulated += delta
+        # Outside the gate on purpose: the gate decides whether to COUNT the
+        # delta, not whether to remember the position. Moving _prev only on
+        # counted frames would let the next frame with current bill the skipped
+        # interval too, which is the same inflation one poll later.
         if current is not None:
             self._prev = current
         super()._handle_coordinator_update()
