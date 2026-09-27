@@ -5,6 +5,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
+from time import monotonic
 from typing import Any
 
 import aiohttp
@@ -130,6 +131,18 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._live_energy = None
         self._live_time = None
         self.last_session = None
+        # Gap primitive, consumed by the daily sensors. gap_s is the seconds
+        # between the previous successful poll and this one, frame_time is the
+        # moment of this one. Both are None until the first successful poll —
+        # the coordinator does not survive a restart, which is a deliberate
+        # decision, so a sensor that needs a gap across one computes it from
+        # its own persisted stamp instead.
+        self.gap_s: float | None = None
+        self.frame_time: datetime | None = None
+        # Monotonic counterpart of _last_success: a host clock step must not
+        # inflate or hide a gap. Only good within one run; across a restart the
+        # sensors fall back to wall clock, which is accepted.
+        self._last_success_mono: float | None = None
         self._setpoint_dropped = 0
         self._counter_dropped = 0
         # RAM only, and knowingly so: after an HA restart the first frame is
@@ -383,6 +396,17 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # baseline so this poll starts fresh and we don't replay a
                 # transition that happened while offline.
                 self._prev_state = None
+            # Both are read BEFORE _last_success moves: a consumer asking "how
+            # long was I blind" must not be handed a zero because the bookkeeping
+            # ran first.
+            mono = monotonic()
+            self.gap_s = (
+                None
+                if self._last_success_mono is None
+                else mono - self._last_success_mono
+            )
+            self._last_success_mono = mono
+            self.frame_time = now
             self._last_success = now
             await self._load_sw_version_once()
             self._write_sw_version_to_registry(data)

@@ -402,3 +402,66 @@ async def test_a_generation_with_nothing_to_read_never_warns(hass, caplog):
     assert coord._sw_version_loaded, "the counter did run out"
     assert not [r for r in caplog.records
                 if "could not read the firmware version" in r.getMessage()]
+
+
+# --------------------------------------------------------------------------- #
+# (h) the gap primitive
+#
+# gap_s / frame_time are what the daily sensors use to tell "we watched this
+# interval" from "we were blind through it". The sensors own the persistence
+# across a restart; the coordinator only reports what it saw within one run.
+# --------------------------------------------------------------------------- #
+
+async def test_gap_is_none_on_the_first_successful_poll(hass):
+    """Nothing to compare against yet — and None must not read as zero."""
+    coord = _make_coordinator(hass)
+    assert coord.gap_s is None and coord.frame_time is None
+
+    await _poll_ok(coord, state="standby")
+
+    assert coord.gap_s is None, "the first poll has no previous frame"
+    assert coord.frame_time is not None
+
+
+async def test_gap_is_measured_from_the_previous_poll_not_from_this_one(hass, monkeypatch):
+    """The trap: reading the gap after the bookkeeping always yields zero.
+
+    _last_success is overwritten on every successful poll, so a consumer that
+    looks at it after the fact sees no gap at all. This pins the order.
+    """
+    coord = _make_coordinator(hass)
+    # Patch the coordinator's own reference, not time.monotonic itself: the
+    # module object is shared with Home Assistant, which calls it too.
+    ticks = [1000.0, 1100.0, 1130.0]
+    monkeypatch.setattr("custom_components.eveus.coordinator.monotonic",
+                        lambda: ticks.pop(0) if ticks else 1130.0)
+
+    await _poll_ok(coord, state="standby")   # 1000.0 -> first, no gap
+    await _poll_ok(coord, state="charging")  # 1100.0 -> 100 s
+    assert coord.gap_s == 100.0
+    await _poll_ok(coord, state="charging")  # 1130.0 -> 30 s
+    assert coord.gap_s == 30.0
+
+
+async def test_gap_uses_a_monotonic_source_not_the_host_clock(hass, monkeypatch):
+    """A clock step must not invent or hide a gap.
+
+    dt_util.utcnow drives frame_time and is allowed to jump; gap_s is not.
+    """
+    coord = _make_coordinator(hass)
+    ticks = [500.0, 530.0]
+    monkeypatch.setattr("custom_components.eveus.coordinator.monotonic",
+                        lambda: ticks.pop(0) if ticks else 530.0)
+    stamps = [
+        datetime(2026, 7, 1, 12, 0, 0, tzinfo=dt_util.UTC),
+        datetime(2026, 7, 1, 13, 0, 0, tzinfo=dt_util.UTC),  # host clock +1 h
+    ]
+    monkeypatch.setattr("custom_components.eveus.coordinator.dt_util.utcnow",
+                        lambda: stamps.pop(0) if stamps else stamps_last)
+    stamps_last = datetime(2026, 7, 1, 13, 0, 0, tzinfo=dt_util.UTC)
+
+    await _poll_ok(coord, state="standby")
+    await _poll_ok(coord, state="standby")
+
+    assert coord.gap_s == 30.0, "an hour of clock step is not an hour of blindness"
+    assert coord.frame_time == datetime(2026, 7, 1, 13, 0, 0, tzinfo=dt_util.UTC)
