@@ -721,12 +721,24 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         unavoidable: a monotonic reading from before a restart means nothing
         after it. A host clock step then mis-sizes that one gap.
         """
-        gap = self.coordinator.gap_s
-        if gap is not None:
-            return gap
-        if self._prev_stamp is None:
-            return None
-        return (dt_util.utcnow() - self._prev_stamp).total_seconds()
+        own: float | None = None
+        if self._prev_stamp is not None:
+            now = self.coordinator.frame_time or dt_util.utcnow()
+            own = (now - self._prev_stamp).total_seconds()
+        coord = self.coordinator.gap_s
+        if own is None:
+            return coord
+        if coord is None:
+            return own
+        # The sensor's own stamp is authoritative and must not merely be a
+        # fallback. The coordinator's first successful poll happens in
+        # async_setup_entry BEFORE the platforms are forwarded (__init__.py:61
+        # against :65), so by the time this sensor sees its first frame the
+        # coordinator has already paired it with its own predecessor and
+        # reports an ordinary 30-60 s. Trusting that would make the restart
+        # gap invisible in exactly the case this rule exists for: HA down for
+        # half an hour with the station online throughout.
+        return max(own, coord)
 
     def _judge_gap(self, gap: float | None) -> None:
         """The time sensor's criterion: was any interval of this day unwatched?
@@ -754,10 +766,18 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
 
     @callback
     def _handle_coordinator_update(self) -> None:
+        if not self.coordinator.last_update_success:
+            # A failure notification carries no new observation: HA calls the
+            # listeners with the previous frame still in coordinator.data. Read
+            # as a frame it would re-judge an interval already judged and, on a
+            # day whose first frame has not arrived yet, lower the
+            # incompleteness flag on the strength of yesterday's reading.
+            super()._handle_coordinator_update()
+            return
         current = self.coordinator.data.get("sessionTime") if self.coordinator.data else None
         today = dt_util.now().date()
-        # Measured once, at the top: the snapshot below moves _prev_stamp to
-        # now, so anything asking afterwards is told there was no gap at all.
+        # Measured once, at the top: the snapshot below moves _prev_stamp on,
+        # so anything asking afterwards is told there was no gap at all.
         # The same trap the coordinator's own gap has, one layer up.
         gap = self._gap_seconds()
         if self._current_date != today:
@@ -788,7 +808,12 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
             #
             # The whole interval is attributed by the sample that ends it, so
             # accuracy is +/- one poll at every transition. Accepted.
-            if gap is not None and gap > _OBSERVATION_TOLERANCE_S:
+            # None is "we cannot size the blindness", not "there was none" —
+            # the same reading _judge_gap takes. The two must agree: while they
+            # did not, a restore from storage written before prev_stamp existed
+            # left _prev set and the stamp empty, and the delta spanning the
+            # whole downtime went through the current gate instead of this one.
+            if gap is None or gap > _OBSERVATION_TOLERANCE_S:
                 # Across a gap the current gate cannot be used and must not be:
                 # this frame's curMeas1 describes this instant, and says
                 # nothing about the minutes nobody watched. Stacking both
@@ -824,7 +849,11 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
             # _prev_total rather than leaving a stale reading paired with a
             # fresh sessionTime.
             self._prev_total = as_float(self.coordinator.data.get("totalEnergy"))
-            self._prev_stamp = dt_util.utcnow()
+            # The frame's own time, not now. A success->failure notification
+            # re-delivers the stale frame up to an interval plus the timeout
+            # after it was taken; stamping that with utcnow would make the
+            # persisted stamp too young and shrink every gap measured from it.
+            self._prev_stamp = self.coordinator.frame_time or dt_util.utcnow()
         self._judge_gap(gap)
         super()._handle_coordinator_update()
 

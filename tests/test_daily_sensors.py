@@ -896,6 +896,86 @@ def test_the_snapshot_comes_from_one_frame(clock):
     assert sensor._accumulated == watched, "no anchor, no verdict on the gap"
 
 
+async def test_the_sensors_own_stamp_beats_the_coordinators_gap_after_a_restart(
+    hass, clock
+):
+    """The blocker this rule nearly shipped with.
+
+    async_setup_entry awaits the coordinator's first refresh BEFORE forwarding
+    the platforms, so by the time the sensor sees a frame the coordinator has
+    already paired it with its own predecessor and reports an ordinary 60 s.
+    Trusting that makes a half-hour HA outage invisible — in the one scenario
+    the whole rule was written for.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_smoke"
+    long_ago = dt_util.utcnow() - timedelta(minutes=25)
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, STATE_UNAVAILABLE),
+          {"date": _DAY.date().isoformat(), "accumulated_s": 0.0, "prev_s": 100.0,
+           "incomplete": False, "prev_total": 50.0,
+           "prev_stamp": long_ago.isoformat()}),),
+    )
+    await sensor.async_added_to_hass()
+
+    # The coordinator polled once before the platforms were forwarded, so it
+    # reports a perfectly ordinary gap. The station charged nothing meanwhile.
+    _update(sensor, coord, sessionTime=1600, totalEnergy=50.0, curMeas1=16.0,
+            gap_s=60.0, frame_time=dt_util.utcnow())
+
+    assert sensor._accumulated == 0.0, "25 minutes of HA downtime is not charging time"
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
+async def test_a_failure_notification_is_not_read_as_a_frame(hass, clock):
+    """HA calls listeners on success->failure with the stale frame still in place.
+
+    Judging it would lower the incompleteness flag on a day whose first real
+    frame has not arrived, using yesterday's reading as the evidence.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    clock["now"] = _NEXT_DAY
+    sensor._roll_over_at_midnight(None)
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+    coord.last_update_success = False
+    _update(sensor, coord, sessionTime=3700, totalEnergy=50.0, curMeas1=16.0,
+            gap_s=60.0)
+
+    assert sensor.extra_state_attributes["day_incomplete"] is True, "still no frame today"
+    assert sensor._prev_stamp is None, "a failure must not move the snapshot"
+
+
+async def test_an_upgrade_restore_without_a_stamp_does_not_bill_the_downtime(hass, clock):
+    """The first restart after this release, for a session already in progress.
+
+    Storage written by the previous version carries prev_s but no prev_stamp,
+    so the sensor cannot size the gap and the coordinator cannot either. That
+    must read as unobserved. It briefly did not: the delta spanning the whole
+    downtime went through the current gate and counted in full whenever the car
+    happened to be drawing at the moment of the first poll.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_smoke"
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, STATE_UNAVAILABLE),
+          {"date": _DAY.date().isoformat(), "accumulated_s": 0.0,
+           "prev_s": 100.0, "incomplete": False}),),   # old format: no anchor
+    )
+    await sensor.async_added_to_hass()
+    assert sensor._prev == 100.0 and sensor._prev_stamp is None
+
+    _update(sensor, coord, sessionTime=36100, totalEnergy=54.9, curMeas1=16.0,
+            gap_s=None)
+
+    assert sensor._accumulated == 0.0, "ten hours of downtime is not charging time"
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
 async def test_the_gap_is_sized_from_the_sensors_own_stamp_across_a_restart(
     hass, clock, monkeypatch
 ):
