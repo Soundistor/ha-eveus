@@ -789,6 +789,141 @@ def test_a_day_with_no_frames_reads_zero_and_says_it_is_incomplete(clock, cls):
     assert sensor.extra_state_attributes["day_incomplete"] is True
 
 
+# --------------------------------------------------------------------------- #
+# Counting a delta across an interval nobody watched
+#
+# Owner's decision: count it if — and only if — totalEnergy moved across the
+# gap. Not moved means the station charged nothing, which is a station-side
+# fact rather than an inference. Moved means charging happened, and discarding
+# legitimate time is the worse error.
+# --------------------------------------------------------------------------- #
+
+def test_a_gap_with_no_charging_does_not_count(clock):
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=100, totalEnergy=50.0, curMeas1=16.0)
+
+    # HA was down for an hour; the station stood idle throughout
+    _update(sensor, coord, sessionTime=3700, totalEnergy=50.0, curMeas1=16.0,
+            gap_s=3600.0)
+
+    assert sensor._accumulated == 0.0
+
+
+def test_a_gap_with_charging_counts_whole(clock):
+    """The named price: part-charged, part-stood counts entirely."""
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=100, totalEnergy=50.0, curMeas1=16.0)
+
+    _update(sensor, coord, sessionTime=3700, totalEnergy=54.9, curMeas1=16.0,
+            gap_s=3600.0)
+
+    assert sensor._accumulated == 3600.0
+
+
+def test_a_v1_power_cut_rolling_the_counter_back_is_not_charging(clock):
+    """Measured 2026-09-27: V1 reverts totalEnergy to its session-start value.
+
+    An inequality against zero would read that lost tail as charging.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=500, totalEnergy=219.1, curMeas1=16.0)
+
+    _update(sensor, coord, sessionTime=3700, totalEnergy=218.6, curMeas1=16.0,
+            gap_s=3600.0)
+
+    assert sensor._accumulated == 0.0
+
+
+def test_quantisation_noise_does_not_open_the_gate(clock):
+    """The floor is 0.0005 on V2, 0.0000 on V1 (KB-02 §1.1.6)."""
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=100, totalEnergy=4438.5542, curMeas1=16.0)
+
+    _update(sensor, coord, sessionTime=3700, totalEnergy=4438.5547, curMeas1=16.0,
+            gap_s=3600.0)
+
+    assert sensor._accumulated == 0.0
+
+
+def test_the_current_gate_is_not_applied_to_a_gap_delta(clock):
+    """Stacking both gates drops every gap delta — the rejected variant.
+
+    This frame's curMeas1 describes this instant and says nothing about the
+    minutes nobody watched.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=100, totalEnergy=50.0, curMeas1=16.0)
+
+    # charging happened in the gap, but the car has since stopped
+    _update(sensor, coord, sessionTime=3700, totalEnergy=54.9, curMeas1=0,
+            gap_s=3600.0)
+
+    assert sensor._accumulated == 3600.0
+
+
+def test_a_gap_frame_without_total_energy_drops_the_delta(clock):
+    """Conservative on purpose — see the commit message.
+
+    The counter guard strips totalEnergy for two polls, and V1's post-reboot
+    frame carries none. Without a reading there is no station-side fact, and a
+    false positive costs far more than a miss.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=100, totalEnergy=50.0, curMeas1=16.0)
+
+    _update(sensor, coord, sessionTime=3700, curMeas1=16.0, gap_s=3600.0)
+
+    assert sensor._accumulated == 0.0
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
+def test_the_snapshot_comes_from_one_frame(clock):
+    """A frame stripped of totalEnergy clears the anchor, not just ages it.
+
+    Otherwise a stale total pairs with a fresh sessionTime and the Delta spans
+    a longer window than the gap — opening the gate for a gap in which nothing
+    charged.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=100, totalEnergy=50.0, curMeas1=16.0)
+    _update(sensor, coord, sessionTime=130, curMeas1=16.0)   # guard stripped it
+    assert sensor._prev_total is None
+    watched = sensor._accumulated   # the 30 s before the gap, counted normally
+
+    _update(sensor, coord, sessionTime=3730, totalEnergy=54.9, curMeas1=16.0,
+            gap_s=3600.0)
+
+    assert sensor._accumulated == watched, "no anchor, no verdict on the gap"
+
+
+async def test_the_gap_is_sized_from_the_sensors_own_stamp_across_a_restart(
+    hass, clock, monkeypatch
+):
+    """The coordinator cannot answer here — it keeps no state across a restart.
+
+    This is the case the rule exists for, so the sensor uses its own stamp.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_smoke"
+    long_ago = (dt_util.utcnow() - timedelta(hours=2)).isoformat()
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, STATE_UNAVAILABLE),
+          {"date": _DAY.date().isoformat(), "accumulated_s": 0.0, "prev_s": 100.0,
+           "incomplete": False, "prev_total": 50.0, "prev_stamp": long_ago}),),
+    )
+    await sensor.async_added_to_hass()
+    assert sensor._prev_total == 50.0
+
+    # coordinator's first poll after the restart: it has no gap of its own
+    _update(sensor, coord, sessionTime=7300, totalEnergy=54.9, curMeas1=16.0,
+            gap_s=None)
+
+    assert sensor._accumulated == 7200.0, "two hours of charging, seen by the counter"
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
 @pytest.mark.parametrize(
     "cls,stored",
     [

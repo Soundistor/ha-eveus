@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -414,6 +414,19 @@ _OBSERVATION_TOLERANCE_S = 180
 # `entities` row, and it does not reach long-term statistics.
 ATTR_DAY_INCOMPLETE = "day_incomplete"
 
+# How far totalEnergy must move across an unobserved interval before that
+# interval counts as charging. One number for both generations, which the
+# 2026-09-27 measurement made possible: sweeping every pair of frames inside a
+# continuous session, the two counters drift against each other by at most
+# 0.0005 kWh on V2 and by exactly 0.0000 on V1 (KB-02 §1.1.6). 0.05 clears the
+# V2 floor a hundredfold and sits below V1's 0.1 kWh quantum, so any real V1
+# movement clears it too.
+#
+# Strictly greater, never "!= 0": a V1 power cut rolls totalEnergy BACK to its
+# value at session start (§1.1.7, measured -0.5 kWh), and an inequality would
+# read a lost tail as charging.
+_CHARGE_MOVED_KWH = 0.05
+
 
 class _MidnightRollover:
     """Rolls a daily accumulator over at local midnight, without a frame.
@@ -613,6 +626,14 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         self._attr_last_reset = None
         self._incomplete: bool = True
         self._day_had_frame: bool = False
+        # Snapshot of the last frame that carried BOTH counters, plus when it
+        # arrived. Taken from ONE frame: if the two moved independently, a
+        # Delta over totalEnergy would span a longer window than the delta over
+        # sessionTime and could open the gate for a gap in which nothing
+        # charged. The stamp is what lets this sensor size a gap that spans an
+        # HA restart, where the coordinator has no previous frame of its own.
+        self._prev_total: float | None = None
+        self._prev_stamp: datetime | None = None
 
     @property
     def native_value(self):
@@ -640,6 +661,10 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
                 "accumulated_s": self._accumulated,
                 "prev_s": self._prev,
                 "incomplete": self._incomplete,
+                "prev_total": self._prev_total,
+                "prev_stamp": (
+                    self._prev_stamp.isoformat() if self._prev_stamp else None
+                ),
             }
         )
 
@@ -672,6 +697,9 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         self._day_had_frame = True
         self._accumulated = accumulated
         self._prev = previous
+        self._prev_total = as_float(values.get("prev_total"))
+        stamp = values.get("prev_stamp")
+        self._prev_stamp = dt_util.parse_datetime(stamp) if stamp else None
         self._attr_last_reset = dt_util.start_of_local_day()
 
     def _reset_for_new_day(self) -> None:
@@ -683,7 +711,24 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         self._accumulated = 0.0
         self._prev = None
 
-    def _judge_gap(self) -> None:
+    def _gap_seconds(self) -> float | None:
+        """How long this sensor was blind before the current frame.
+
+        The coordinator answers within one run. Across a restart it cannot —
+        it keeps no state of its own, deliberately — and that is exactly the
+        case this rule exists for, so the sensor falls back to its own
+        persisted stamp. Wall clock there rather than monotonic, which is
+        unavoidable: a monotonic reading from before a restart means nothing
+        after it. A host clock step then mis-sizes that one gap.
+        """
+        gap = self.coordinator.gap_s
+        if gap is not None:
+            return gap
+        if self._prev_stamp is None:
+            return None
+        return (dt_util.utcnow() - self._prev_stamp).total_seconds()
+
+    def _judge_gap(self, gap: float | None) -> None:
         """The time sensor's criterion: was any interval of this day unwatched?
 
         Different from the energy sensor's on purpose. This one accumulates a
@@ -693,7 +738,6 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         complete day for energy and a complete day here too; one that went
         quiet at noon for an hour has a complete baseline and an incomplete day.
         """
-        gap = self.coordinator.gap_s
         if gap is None or gap > _OBSERVATION_TOLERANCE_S:
             # None means the coordinator has no previous frame — its first poll
             # after a start. We cannot know what happened before it, and
@@ -712,6 +756,10 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
     def _handle_coordinator_update(self) -> None:
         current = self.coordinator.data.get("sessionTime") if self.coordinator.data else None
         today = dt_util.now().date()
+        # Measured once, at the top: the snapshot below moves _prev_stamp to
+        # now, so anything asking afterwards is told there was no gap at all.
+        # The same trap the coordinator's own gap has, one layer up.
+        gap = self._gap_seconds()
         if self._current_date != today:
             self._accumulated = 0.0
             self._prev = current
@@ -740,16 +788,44 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
             #
             # The whole interval is attributed by the sample that ends it, so
             # accuracy is +/- one poll at every transition. Accepted.
-            amps = as_float(self.coordinator.data.get("curMeas1"))
-            if delta > 0 and amps is not None and amps > 0:
-                self._accumulated += delta
+            if gap is not None and gap > _OBSERVATION_TOLERANCE_S:
+                # Across a gap the current gate cannot be used and must not be:
+                # this frame's curMeas1 describes this instant, and says
+                # nothing about the minutes nobody watched. Stacking both
+                # gates would drop every gap delta, which is the variant the
+                # owner rejected, arrived at by accident.
+                #
+                # The station-side fact available instead is whether the
+                # lifetime counter moved across the gap. It did not: the car
+                # stood, drop the delta. It did: charging happened, and the
+                # owner's decision is to count the interval whole rather than
+                # discard real time. The named price is that a gap where the
+                # car charged for part of it counts entirely.
+                total = as_float(self.coordinator.data.get("totalEnergy"))
+                moved = (
+                    total is not None
+                    and self._prev_total is not None
+                    and total - self._prev_total > _CHARGE_MOVED_KWH
+                )
+                if delta > 0 and moved:
+                    self._accumulated += delta
+            else:
+                amps = as_float(self.coordinator.data.get("curMeas1"))
+                if delta > 0 and amps is not None and amps > 0:
+                    self._accumulated += delta
         # Outside the gate on purpose: the gate decides whether to COUNT the
         # delta, not whether to remember the position. Moving _prev only on
         # counted frames would let the next frame with current bill the skipped
         # interval too, which is the same inflation one poll later.
         if current is not None:
             self._prev = current
-        self._judge_gap()
+            # Both halves of the snapshot move together, from this one frame.
+            # A frame the guard stripped of totalEnergy therefore clears
+            # _prev_total rather than leaving a stale reading paired with a
+            # fresh sessionTime.
+            self._prev_total = as_float(self.coordinator.data.get("totalEnergy"))
+            self._prev_stamp = dt_util.utcnow()
+        self._judge_gap(gap)
         super()._handle_coordinator_update()
 
 
