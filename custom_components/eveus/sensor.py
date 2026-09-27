@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 from homeassistant.util import dt as dt_util
 
@@ -399,7 +400,49 @@ class SessionEnergySensor(ChargerSensor, RestoreEntity):
         super()._handle_coordinator_update()
 
 
-class DailyEnergySensor(ChargerSensor, RestoreEntity):
+class _MidnightRollover:
+    """Rolls a daily accumulator over at local midnight, without a frame.
+
+    The day boundary used to live entirely inside _handle_coordinator_update,
+    so it arrived on the first successful poll after midnight — not at
+    midnight. With the charger powered only while a car is plugged in, that is
+    routinely hours late and, on a day with no charging at all, never: the
+    sensor then shows yesterday's total all day (measured 2026-09-20 to
+    2026-09-22, 33.761 kWh displayed for a day with no session).
+
+    The timer is added to the frame check, not substituted for it. After an HA
+    restart past midnight there is no timer yet, and the frame path is what
+    rolls the day over then.
+    """
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_track_time_change(
+                self.hass, self._roll_over_at_midnight, hour=0, minute=0, second=0
+            )
+        )
+
+    @callback
+    def _roll_over_at_midnight(self, _now) -> None:
+        self._reset_for_new_day()
+        self._current_date = dt_util.now().date()
+        # Both daily sensors are state_class TOTAL carrying their own
+        # last_reset. Zeroing the value while last_reset still points at
+        # yesterday makes the recorder read a TOTAL sensor falling without a
+        # reset, and it subtracts yesterday's whole figure from the long-term
+        # sum. The two must move together.
+        self._attr_last_reset = dt_util.start_of_local_day()
+        # Nothing else publishes here: without an explicit write the zero waits
+        # for the next frame, which on an idle day never comes — exactly the
+        # case this timer exists for.
+        self.async_write_ha_state()
+
+    def _reset_for_new_day(self) -> None:
+        raise NotImplementedError
+
+
+class DailyEnergySensor(_MidnightRollover, ChargerSensor, RestoreEntity):
     """Daily charging energy — total_energy delta from midnight."""
 
     def __init__(self, coordinator, charger, prefix, entry_id):
@@ -458,6 +501,15 @@ class DailyEnergySensor(ChargerSensor, RestoreEntity):
             pass
         self._attr_last_reset = dt_util.start_of_local_day()
 
+    def _reset_for_new_day(self) -> None:
+        # _computed must go to zero together with _baseline. Leaving it holding
+        # yesterday's figure sends the next frame into the rebase branch below,
+        # which would set baseline = total - yesterday and start the new day
+        # already loaded with yesterday's kWh — the trap the comment in
+        # _handle_coordinator_update records as fixed.
+        self._baseline = None
+        self._computed = 0.0
+
     @callback
     def _handle_coordinator_update(self) -> None:
         total = self.coordinator.data.get("totalEnergy") if self.coordinator.data else None
@@ -494,7 +546,7 @@ class DailyEnergySensor(ChargerSensor, RestoreEntity):
         super()._handle_coordinator_update()
 
 
-class DailySessionTimeSensor(ChargerSensor, RestoreEntity):
+class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
     """Daily session time — accumulated session_time per day, in hours."""
 
     def __init__(self, coordinator, charger, prefix, entry_id):
@@ -556,6 +608,14 @@ class DailySessionTimeSensor(ChargerSensor, RestoreEntity):
         self._accumulated = accumulated
         self._prev = previous
         self._attr_last_reset = dt_util.start_of_local_day()
+
+    def _reset_for_new_day(self) -> None:
+        # _prev must be dropped, not kept. The first frame of the new day would
+        # otherwise take its delta against last night's position and bill the
+        # whole unobserved night as charging time — the very symptom this item
+        # inherited from its neighbour.
+        self._accumulated = 0.0
+        self._prev = None
 
     @callback
     def _handle_coordinator_update(self) -> None:

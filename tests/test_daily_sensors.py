@@ -53,10 +53,30 @@ def clock(monkeypatch):
     return holder
 
 
+_BUILT: list = []
+
+
+@pytest.fixture(autouse=True)
+def _remove_entities():
+    """Tear entities down the way HA does when the entry unloads.
+
+    The daily sensors register a midnight timer through async_on_remove, and
+    async_added_to_hass is called directly here without anything ever removing
+    the entity — so the timer outlives the test and pytest-homeassistant fails
+    the teardown on a lingering timer.
+    """
+    _BUILT.clear()
+    yield
+    for entity in _BUILT:
+        entity._call_on_remove_callbacks()
+    _BUILT.clear()
+
+
 def _make(cls):
     coord = _Coord()
     entity = cls(coord, _Charger(), "smoke", "e1")
     entity.async_write_ha_state = lambda: None  # bypass HA state plumbing
+    _BUILT.append(entity)
     return entity, coord
 
 
@@ -515,3 +535,123 @@ async def test_daily_session_time_restore_same_day(hass, clock, monkeypatch):
     assert sensor._accumulated == 3600.0
     assert sensor._prev == 3700.0
     assert sensor.native_value == 1.0
+
+
+# --------------------------------------------------------------------------- #
+# Midnight rollover on a timer
+#
+# The day boundary used to arrive on the first successful poll after midnight.
+# The charger is powered only while a car is plugged in, so on a day with no
+# charging it never arrived: measured 2026-09-20..22, the sensor showed 33.761
+# kWh all through a day with no session.
+# --------------------------------------------------------------------------- #
+
+def test_daily_energy_timer_rollover_zeroes_the_day(clock):
+    sensor, coord = _make(DailyEnergySensor)
+    _update(sensor, coord, totalEnergy=100.0)
+    _update(sensor, coord, totalEnergy=108.0)
+    assert sensor.native_value == 8.0
+
+    clock["now"] = _NEXT_DAY
+    sensor._roll_over_at_midnight(None)
+
+    assert sensor.native_value == 0.0, "a new day starts at zero, not at unknown"
+    assert sensor._current_date == _NEXT_DAY.date()
+
+
+def test_daily_energy_timer_rollover_moves_last_reset_with_the_value(clock):
+    """Zeroing a TOTAL sensor without moving last_reset corrupts the long-term sum.
+
+    The recorder would read a fall with no reset and subtract yesterday's whole
+    figure from `sum`.
+    """
+    sensor, coord = _make(DailyEnergySensor)
+    _update(sensor, coord, totalEnergy=100.0)
+    _update(sensor, coord, totalEnergy=108.0)
+    before = sensor._attr_last_reset
+
+    clock["now"] = _NEXT_DAY
+    sensor._roll_over_at_midnight(None)
+
+    assert sensor._attr_last_reset != before
+    assert sensor._attr_last_reset == dt_util.start_of_local_day(_NEXT_DAY)
+
+
+def test_daily_energy_timer_rollover_does_not_carry_yesterday_over(clock):
+    """The trap: leaving _computed set sends the next frame into the rebase branch.
+
+    baseline would become total - yesterday, and the new day would open already
+    holding yesterday's kWh.
+    """
+    sensor, coord = _make(DailyEnergySensor)
+    _update(sensor, coord, totalEnergy=100.0)
+    _update(sensor, coord, totalEnergy=108.0)
+
+    clock["now"] = _NEXT_DAY
+    sensor._roll_over_at_midnight(None)
+    _update(sensor, coord, totalEnergy=108.0)   # first frame of the new day
+
+    assert sensor.native_value == 0.0, "yesterday's 8 kWh must not reappear"
+    _update(sensor, coord, totalEnergy=110.5)
+    assert sensor.native_value == 2.5
+
+
+def test_daily_session_time_timer_rollover_drops_prev(clock):
+    """Keeping _prev bills the whole unobserved night as charging time."""
+    sensor, coord = _make(DailySessionTimeSensor)
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0)
+    _update(sensor, coord, sessionTime=3700, curMeas1=16.0)
+    assert sensor.native_value == 1.0
+
+    clock["now"] = _NEXT_DAY
+    sensor._roll_over_at_midnight(None)
+    assert sensor._prev is None
+
+    # A session that ran all night: the counter is far ahead of last night's
+    # position, and that distance is not today's charging time.
+    _update(sensor, coord, sessionTime=40000, curMeas1=16.0)
+    assert sensor.native_value == 0.0
+    _update(sensor, coord, sessionTime=41800, curMeas1=16.0)
+    assert sensor.native_value == 0.5
+
+
+def test_a_day_with_no_frames_at_all_reads_zero(clock):
+    """Symptom 3: the charger is unplugged and powered off for a whole day."""
+    sensor, coord = _make(DailyEnergySensor)
+    _update(sensor, coord, totalEnergy=100.0)
+    _update(sensor, coord, totalEnergy=133.761)
+    assert sensor.native_value == 33.761
+
+    clock["now"] = _NEXT_DAY
+    sensor._roll_over_at_midnight(None)   # no frame arrives all day
+
+    assert sensor.native_value == 0.0, "yesterday's total must not stand in for today"
+
+
+@pytest.mark.parametrize("cls", [DailyEnergySensor, DailySessionTimeSensor])
+def test_timer_rollover_publishes_the_state(clock, cls):
+    """Without an explicit write the zero waits for a frame that never comes."""
+    sensor, coord = _make(cls)
+    writes = []
+    sensor.async_write_ha_state = lambda: writes.append(1)
+
+    clock["now"] = _NEXT_DAY
+    sensor._roll_over_at_midnight(None)
+
+    assert writes, "the timer must publish; on an idle day nothing else will"
+
+
+@pytest.mark.parametrize("cls", [DailyEnergySensor, DailySessionTimeSensor])
+async def test_midnight_timer_is_registered_and_removable(hass, clock, cls):
+    """The timer is added to the frame path, not substituted for it.
+
+    After an HA restart past midnight there is no timer yet, and the frame
+    rollover — which the tests above still exercise — is what covers that.
+    """
+    sensor, coord = _make(cls)
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_smoke"
+
+    await sensor.async_added_to_hass()
+
+    assert sensor._on_remove, "async_added_to_hass registered the midnight timer"
