@@ -400,6 +400,21 @@ class SessionEnergySensor(ChargerSensor, RestoreEntity):
         super()._handle_coordinator_update()
 
 
+# How far from a boundary an observation may sit and still count as covering it.
+# Named as a number on purpose: the poll interval is dynamic (30/60 s,
+# coordinator.py) and flips on the very frame being judged, and a WRITE_SETTLE
+# refresh shifts the grid, so deriving the tolerance from update_interval judges
+# the day by an interval that was not in force for most of it. 180 s clears two
+# of the longest intervals with room for jitter.
+_OBSERVATION_TOLERANCE_S = 180
+
+# Attribute both daily sensors carry. The value says what the integration
+# managed to observe; this says whether that was the whole day. Both costs were
+# named to the owner and accepted: an attribute is invisible on a dashboard
+# `entities` row, and it does not reach long-term statistics.
+ATTR_DAY_INCOMPLETE = "day_incomplete"
+
+
 class _MidnightRollover:
     """Rolls a daily accumulator over at local midnight, without a frame.
 
@@ -426,6 +441,12 @@ class _MidnightRollover:
     @callback
     def _roll_over_at_midnight(self, _now) -> None:
         self._reset_for_new_day()
+        # A fresh day starts unobserved and is cleared by the first timely
+        # frame. The other way round — start "complete" and raise on a gap —
+        # leaves a day with no frames at all reading 0 AND claiming to be
+        # complete, which is the worst of the three symptoms dressed as the
+        # absence of one.
+        self._incomplete = True
         self._current_date = dt_util.now().date()
         # Both daily sensors are state_class TOTAL carrying their own
         # last_reset. Zeroing the value while last_reset still points at
@@ -441,6 +462,18 @@ class _MidnightRollover:
     def _reset_for_new_day(self) -> None:
         raise NotImplementedError
 
+    def _covers_midnight(self, frame_time) -> bool:
+        """Did this frame land close enough to midnight to cover the boundary?
+
+        Either side counts. A frame from just before midnight is a *better*
+        baseline than one from after it, so judging only lateness would mark
+        the better outcome as the worse one.
+        """
+        if frame_time is None:
+            return False
+        delta = (frame_time - dt_util.start_of_local_day()).total_seconds()
+        return abs(delta) <= _OBSERVATION_TOLERANCE_S
+
 
 class DailyEnergySensor(_MidnightRollover, ChargerSensor, RestoreEntity):
     """Daily charging energy — total_energy delta from midnight."""
@@ -451,6 +484,7 @@ class DailyEnergySensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         self._computed: float | None = None
         self._current_date: date | None = None
         self._attr_last_reset = None
+        self._incomplete: bool = True
 
     @property
     def native_value(self):
@@ -469,6 +503,7 @@ class DailyEnergySensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         return {
             "date": self._current_date.isoformat() if self._current_date else None,
             "baseline_kwh": self._baseline,
+            ATTR_DAY_INCOMPLETE: self._incomplete,
         }
 
     @property
@@ -478,6 +513,7 @@ class DailyEnergySensor(_MidnightRollover, ChargerSensor, RestoreEntity):
                 "date": self._current_date.isoformat() if self._current_date else None,
                 "baseline_kwh": self._baseline,
                 "computed": self._computed,
+                "incomplete": self._incomplete,
             }
         )
 
@@ -494,12 +530,23 @@ class DailyEnergySensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         if stored_date != today:
             return
         self._current_date = stored_date
+        self._incomplete = bool(values.get("incomplete", True))
         self._baseline = values.get("baseline_kwh")
         try:  # noqa: SIM105  explicit try/except reads clearer than contextlib.suppress
             self._computed = float(values.get("computed"))
         except (ValueError, TypeError):
             pass
         self._attr_last_reset = dt_util.start_of_local_day()
+
+    def _judge_baseline(self) -> None:
+        """The energy sensor's criterion: was the baseline taken at midnight?
+
+        This sensor loses energy only at the day's start — everything after the
+        baseline is a difference of two readings and survives any gap. So the
+        one question worth asking is where the baseline came from, and a gap
+        later in the day does not make the figure wrong.
+        """
+        self._incomplete = not self._covers_midnight(self.coordinator.frame_time)
 
     def _reset_for_new_day(self) -> None:
         # _computed must go to zero together with _baseline. Leaving it holding
@@ -526,6 +573,7 @@ class DailyEnergySensor(_MidnightRollover, ChargerSensor, RestoreEntity):
             self._baseline = total
             self._current_date = today
             self._attr_last_reset = dt_util.start_of_local_day()
+            self._judge_baseline()
         # Rebase, keeping whatever the day has already accumulated. Two ways in,
         # one repair:
         #   * baseline is None — the day turned over on a frame without
@@ -539,8 +587,16 @@ class DailyEnergySensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         #     midnight.
         # Subtracting _computed is what keeps the accumulated day: it is already
         # persisted, so no new field has to be stored.
+        first_baseline_of_the_day = self._baseline is None
         if total is not None and (self._baseline is None or total < self._baseline):
             self._baseline = total - (self._computed or 0.0)
+            # Only the day's FIRST baseline says anything about observation.
+            # The other way into this branch is a reset in the station's web UI
+            # mid-day, which re-takes the baseline without the day having gone
+            # unobserved — judging that would raise the flag on a day we
+            # watched from end to end.
+            if first_baseline_of_the_day:
+                self._judge_baseline()
         if total is not None and self._baseline is not None:
             self._computed = round(total - self._baseline, 3)
         super()._handle_coordinator_update()
@@ -555,6 +611,8 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         self._prev: float | None = None
         self._current_date: date | None = None
         self._attr_last_reset = None
+        self._incomplete: bool = True
+        self._day_had_frame: bool = False
 
     @property
     def native_value(self):
@@ -571,6 +629,7 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
             "date": self._current_date.isoformat() if self._current_date else None,
             "accumulated_s": self._accumulated,
             "prev_s": self._prev,
+            ATTR_DAY_INCOMPLETE: self._incomplete,
         }
 
     @property
@@ -580,6 +639,7 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
                 "date": self._current_date.isoformat() if self._current_date else None,
                 "accumulated_s": self._accumulated,
                 "prev_s": self._prev,
+                "incomplete": self._incomplete,
             }
         )
 
@@ -605,17 +665,48 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         except (ValueError, TypeError):
             return
         self._current_date = stored_date
+        self._incomplete = bool(values.get("incomplete", True))
+        # Mid-day by definition: frames have already happened, so a small gap
+        # after the restart must not be read as "the day was watched from the
+        # start" and clear a flag raised before it.
+        self._day_had_frame = True
         self._accumulated = accumulated
         self._prev = previous
         self._attr_last_reset = dt_util.start_of_local_day()
 
     def _reset_for_new_day(self) -> None:
+        self._day_had_frame = False
         # _prev must be dropped, not kept. The first frame of the new day would
         # otherwise take its delta against last night's position and bill the
         # whole unobserved night as charging time — the very symptom this item
         # inherited from its neighbour.
         self._accumulated = 0.0
         self._prev = None
+
+    def _judge_gap(self) -> None:
+        """The time sensor's criterion: was any interval of this day unwatched?
+
+        Different from the energy sensor's on purpose. This one accumulates a
+        delta per frame, so an unobserved stretch loses the time inside it
+        wherever in the day it falls — not only at the start. A station that
+        was offline from 20:00 and whose first frame lands at 00:00:30 has a
+        complete day for energy and a complete day here too; one that went
+        quiet at noon for an hour has a complete baseline and an incomplete day.
+        """
+        gap = self.coordinator.gap_s
+        if gap is None or gap > _OBSERVATION_TOLERANCE_S:
+            # None means the coordinator has no previous frame — its first poll
+            # after a start. We cannot know what happened before it, and
+            # "cannot know" is not "nothing happened".
+            self._incomplete = True
+        elif not self._day_had_frame:
+            # The first frame of the day, and it followed its predecessor
+            # closely enough that nothing was missed across midnight. This is
+            # the only place the flag is lowered: once raised within a day it
+            # stays raised, so a quiet hour at noon is not erased by a tidy
+            # afternoon.
+            self._incomplete = False
+        self._day_had_frame = True
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -626,6 +717,12 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
             self._prev = current
             self._current_date = today
             self._attr_last_reset = dt_util.start_of_local_day()
+            # The frame path rolls the day over when the timer could not: after
+            # an HA restart past midnight. The new day has to start unjudged,
+            # or it inherits yesterday's verdict — and _judge_gap below is what
+            # decides it, which is why the reset sits here and not in it.
+            self._incomplete = True
+            self._day_had_frame = False
         elif current is not None and self._prev is not None:
             delta = current - self._prev
             # sessionTime is the session's wall-clock duration, not charging
@@ -652,6 +749,7 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         # interval too, which is the same inflation one poll later.
         if current is not None:
             self._prev = current
+        self._judge_gap()
         super()._handle_coordinator_update()
 
 

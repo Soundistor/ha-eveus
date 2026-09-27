@@ -28,6 +28,10 @@ class _Coord:
     def __init__(self):
         self.data: dict = {}
         self.last_update_success = True
+        # Mirrors the real coordinator's gap primitive; this file is about the
+        # numeric guard, so a normally polled frame is the right default.
+        self.gap_s: float | None = 30.0
+        self.frame_time = None
 
     def async_add_listener(self, update_callback, context=None):
         return lambda: None

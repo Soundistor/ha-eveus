@@ -34,6 +34,11 @@ class _Coord:
     def __init__(self):
         self.data: dict = {}
         self.last_update_success = True
+        # Mirrors the real coordinator's gap primitive. Defaults describe a
+        # normally polled frame, so a test that says nothing about the gap is
+        # a test about something else.
+        self.gap_s: float | None = 30.0
+        self.frame_time = None
 
     def async_add_listener(self, update_callback, context=None):
         return lambda: None
@@ -80,8 +85,10 @@ def _make(cls):
     return entity, coord
 
 
-def _update(entity, coord, **data):
+def _update(entity, coord, gap_s=30.0, frame_time=None, **data):
     coord.data = data
+    coord.gap_s = gap_s
+    coord.frame_time = frame_time
     entity._handle_coordinator_update()
 
 
@@ -655,3 +662,153 @@ async def test_midnight_timer_is_registered_and_removable(hass, clock, cls):
     await sensor.async_added_to_hass()
 
     assert sensor._on_remove, "async_added_to_hass registered the midnight timer"
+
+
+# --------------------------------------------------------------------------- #
+# The incompleteness flag
+#
+# The value says what the integration observed; the flag says whether that was
+# the whole day. The two sensors judge it by DIFFERENT criteria, on purpose:
+# energy can only lose at the day's start, time loses wherever the gap falls.
+# --------------------------------------------------------------------------- #
+
+def _midnight():
+    """Local midnight of the day the patched clock is on.
+
+    Built at CALL time on purpose. _DAY is created at import, when
+    DEFAULT_TIME_ZONE is still UTC, while the suite later runs under
+    US/Pacific — so a midnight derived from _DAY sits seven hours away from
+    the one the sensor compares against.
+    """
+    return dt_util.start_of_local_day()
+
+
+def test_daily_energy_is_complete_when_the_baseline_is_taken_at_midnight(clock):
+    sensor, coord = _make(DailyEnergySensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+    assert sensor.extra_state_attributes["day_incomplete"] is True, "starts unobserved"
+
+    _update(sensor, coord, totalEnergy=100.0,
+            frame_time=_midnight() + timedelta(seconds=30))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+
+
+def test_daily_energy_is_incomplete_when_the_baseline_is_taken_hours_late(clock):
+    """The measured case: the station was dark until 09:40."""
+    sensor, coord = _make(DailyEnergySensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+
+    _update(sensor, coord, totalEnergy=100.0,
+            frame_time=_midnight() + timedelta(hours=9, minutes=40))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
+def test_daily_energy_counts_a_baseline_from_just_before_midnight_as_complete(clock):
+    """A stale pre-midnight frame is a BETTER baseline than a late one.
+
+    Judging lateness only would mark the better outcome as the worse one.
+    """
+    sensor, coord = _make(DailyEnergySensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+
+    _update(sensor, coord, totalEnergy=100.0,
+            frame_time=_midnight() - timedelta(seconds=90))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+
+
+def test_a_web_ui_counter_reset_does_not_mark_the_day_incomplete(clock):
+    """The other way into the rebase branch — and the day was watched throughout."""
+    sensor, coord = _make(DailyEnergySensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+    _update(sensor, coord, totalEnergy=100.0, frame_time=_midnight())
+    _update(sensor, coord, totalEnergy=104.0, frame_time=_midnight())
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+
+    # rstEM2 in the station's web UI: the lifetime total drops below baseline
+    _update(sensor, coord, totalEnergy=0.5,
+            frame_time=_midnight() + timedelta(hours=6))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+    assert sensor.native_value == 4.0, "the day's accumulation survives the reset"
+
+
+def test_daily_session_time_is_complete_while_the_polling_is_unbroken(clock):
+    sensor, coord = _make(DailySessionTimeSensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0, gap_s=30.0)
+
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+
+
+def test_daily_session_time_is_incomplete_after_an_unwatched_stretch(clock):
+    """And it stays incomplete: a tidy afternoon does not erase a quiet hour."""
+    sensor, coord = _make(DailySessionTimeSensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0, gap_s=30.0)
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+
+    _update(sensor, coord, sessionTime=3700, curMeas1=16.0, gap_s=3600.0)
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+    _update(sensor, coord, sessionTime=3730, curMeas1=16.0, gap_s=30.0)
+    assert sensor.extra_state_attributes["day_incomplete"] is True, "not lowered later"
+
+
+def test_an_unknown_gap_reads_as_unobserved_not_as_observed(clock):
+    """gap_s is None on the coordinator's first poll after a start.
+
+    "We cannot know what happened before this" is not "nothing happened".
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0, gap_s=None)
+
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
+@pytest.mark.parametrize("cls", [DailyEnergySensor, DailySessionTimeSensor])
+def test_a_day_with_no_frames_reads_zero_and_says_it_is_incomplete(clock, cls):
+    """The pairing is the point: 0 alone would be a lie told confidently."""
+    sensor, coord = _make(cls)
+    clock["now"] = _NEXT_DAY
+    sensor._roll_over_at_midnight(None)
+
+    assert sensor.native_value == 0.0
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
+@pytest.mark.parametrize(
+    "cls,stored",
+    [
+        (DailyEnergySensor,
+         {"baseline_kwh": 100.0, "computed": 4.0, "incomplete": True}),
+        (DailySessionTimeSensor,
+         {"accumulated_s": 3600.0, "prev_s": 3700.0, "incomplete": True}),
+    ],
+)
+async def test_the_flag_survives_a_restart_within_the_same_day(hass, clock, cls, stored):
+    """Without persistence a restart silently relabels an incomplete day complete."""
+    sensor, coord = _make(cls)
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_smoke"
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, STATE_UNAVAILABLE),
+          {"date": _DAY.date().isoformat(), **stored}),),
+    )
+
+    await sensor.async_added_to_hass()
+
+    assert sensor.extra_state_attributes["day_incomplete"] is True

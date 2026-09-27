@@ -376,6 +376,7 @@
       'attributes': ReadOnlyDict({
         'baseline_kwh': None,
         'date': None,
+        'day_incomplete': True,
         'device_class': 'energy',
         'friendly_name': 'Eveus 1.2.3.4 Daily Energy',
         'icon': 'mdi:counter',
@@ -393,6 +394,7 @@
       'attributes': ReadOnlyDict({
         'accumulated_s': 0.0,
         'date': None,
+        'day_incomplete': True,
         'device_class': 'duration',
         'friendly_name': 'Eveus 1.2.3.4 Daily Session Time',
         'icon': 'mdi:av-timer',
@@ -1058,6 +1060,7 @@
       'attributes': ReadOnlyDict({
         'baseline_kwh': None,
         'date': None,
+        'day_incomplete': True,
         'device_class': 'energy',
         'friendly_name': 'Eveus 1.2.3.4 Daily Energy',
         'icon': 'mdi:counter',
@@ -1075,6 +1078,7 @@
       'attributes': ReadOnlyDict({
         'accumulated_s': 0.0,
         'date': None,
+        'day_incomplete': True,
         'device_class': 'duration',
         'friendly_name': 'Eveus 1.2.3.4 Daily Session Time',
         'icon': 'mdi:av-timer',
