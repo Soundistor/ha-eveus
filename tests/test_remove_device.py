@@ -40,8 +40,8 @@ async def test_the_live_row_cannot_be_deleted():
 @pytest.mark.parametrize(
     "identifier",
     [
-        (DOMAIN, "192.168.31.101"),   # the pre-0.4.0 scheme
-        (DOMAIN, "192.168.31.100"),
+        (DOMAIN, "192.0.2.101"),      # the pre-0.4.0 scheme
+        (DOMAIN, "192.0.2.100"),
         (DOMAIN, "some-older-id"),    # the scheme before that one
     ],
 )
@@ -53,7 +53,7 @@ async def test_a_row_from_an_older_scheme_can_be_deleted(identifier):
 
 async def test_a_row_that_also_carries_the_current_identifier_stays():
     # Belt and braces: a row holding both identifiers is still the live one.
-    device = _device((DOMAIN, "192.168.31.101"), (DOMAIN, _ENTRY_ID))
+    device = _device((DOMAIN, "192.0.2.101"), (DOMAIN, _ENTRY_ID))
 
     assert await async_remove_config_entry_device(None, _entry(), device) is False
 
