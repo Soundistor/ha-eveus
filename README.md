@@ -133,10 +133,10 @@ The **device prefix** determines entity IDs: a prefix of `eveus_1` produces `sen
 | `aimodecurrent` | A | Current the adaptive algorithm is allowing right now; empty while adaptive mode is off |
 | `curdesign` | A | Design max current |
 | `sessiontime` | s | Session duration (raw seconds) |
-| `session_time_daily` | h | Charging time since local midnight (resets daily, survives restart) |
+| `session_time_daily` | h | Charging time since local midnight (resets daily, survives restart). Carries `day_incomplete` — see below |
 | `sessionenergy` | kWh | Energy this session |
 | `totalenergy` | kWh | Total energy (cumulative) |
-| `energy_daily` | kWh | Charging energy since local midnight (resets daily, survives restart) |
+| `energy_daily` | kWh | Charging energy since local midnight (resets daily, survives restart). Carries `day_incomplete` — see below |
 | `last_session_energy` | kWh | Energy of the previous completed session, frozen at session end (survives restart) |
 | `last_session_duration` | s | Duration of the previous completed session, frozen at session end (survives restart) |
 | `systemtime` | — | Charger clock (diagnostic; disabled by default — enable manually if needed) |
@@ -207,6 +207,7 @@ Standard HA diagnostics are supported: **Settings → Integrations → Eveus →
 - Polling interval is dynamic: 30 s while charging, 60 s otherwise.
 - When the charger is powered off or unplugged, its entities simply become **unavailable** — this is normal and does **not** raise a repair issue. A repair issue is only created when the charger is reachable but returns an error (e.g. a malformed response, or the configured API version not matching the firmware).
 - **A charger that is offline when Home Assistant starts does not block setup.** The integration loads anyway, its entities appear as unavailable, and they come back on the first successful poll — within about a minute of the charger rejoining the network. Daily counters keep their value across such a restart instead of starting the day again from zero.
+- **The daily sensors say how much of the day they actually watched.** Both carry a `day_incomplete` attribute: `true` means the integration was not observing for part of the day, so the figure is a truthful sum of what it saw rather than a claim about what the station did. The day turns over at local midnight on a timer, not on the next poll that happens to arrive — a station offline overnight no longer shows yesterday's total until it comes back. A day with no polls at all reads `0` and flags itself incomplete. Note that attributes do not reach long-term statistics, so the flag is visible on the entity and in automations, not in the statistics graph.
 - **A reading that steps backwards is held back for one poll.** A station that has just rebooted serves `totalEnergy` as `0` for about a minute, until the counter is read back from flash, and can report a charging current below the minimum it accepts. A single such frame is dropped instead of published: the entity keeps its previous value and the reading returns on the next poll. A value that is still low on the following poll is accepted — a genuine counter reset, or energy the station really did lose, is not hidden forever.
 - **`total_energy` is a `total` statistic, not `total_increasing`.** The station loses the kWh it has not yet flushed to flash when it reboots, so the counter is not strictly increasing, and Home Assistant was logging a warning that pointed users at this repository. The trip meters (`iem1`, `iem2`) stay `total_increasing`: those are reset on purpose, and `total_increasing` is what preserves their accumulated sum across a reset.
 - **A device row left behind by an upgrade can be deleted.** Before 0.4.0 the device was keyed by IP address; upgrading created a new row and left the old one in place with no entities. That row can now be removed from its own device page. The row the configuration entry currently owns is not deletable — remove the entry instead.
