@@ -61,6 +61,21 @@ class ChargerV2(BaseCharger):
     def ai_modes(self) -> dict:
         return {"off": 0, "voltage": 1, "tesla_auto": 2, "power": 3}
 
+    # Closed on purpose, and shorter than "every numeric key in capabilities".
+    # Left out deliberately: state/subState/aiStatus are mapped to strings
+    # before anything reads them; systemTime/timeMsg/timeZone have their own
+    # handling below and a drop would break the absent-clock contract;
+    # evseEnabled/ground/groundCtrl are 0/1 flags compared as integers by
+    # switch.py and binary_sensor.py. minCurrent is here although it is not a
+    # capability: number.py derives the entity's min from it, and HA runs
+    # floor/ceil on that, which raise on NaN.
+    numeric_fields = (
+        "currentSet", "curDesign", "curMeas1", "voltMeas1", "powerMeas",
+        "temperature1", "temperature2", "aiVoltage", "aiModecurrent",
+        "sessionTime", "sessionEnergy", "totalEnergy", "leakValue",
+        "vBat", "RSSI", "IEM1", "IEM2", "minCurrent",
+    )
+
     @property
     def capabilities(self) -> set:
         return {
@@ -96,6 +111,10 @@ class ChargerV2(BaseCharger):
         for key in ("temperature1", "temperature2"):
             if key in raw:
                 raw[key] = blank_absent_temperature(raw[key])
+        # AFTER the sentinel is blanked, so a -60 "sensor absent" reading stays
+        # present as None instead of having its key removed — consumers read
+        # through .get either way, but three tests pin the key being there.
+        self._drop_unparseable_numerics(raw)
         # systemTime is NOT an absolute UTC epoch: the station sends
         # UTC + timeZone*3600, i.e. its own local wall clock encoded as an
         # epoch. Subtract the offset to get the real instant, otherwise

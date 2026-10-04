@@ -1,6 +1,7 @@
 """Unit tests for ChargerV2.transform_data."""
 
 from datetime import UTC, datetime
+import logging
 
 from charger.v2 import (
     AI_MODE_MAP,
@@ -148,9 +149,17 @@ def test_absent_temperature_sentinel():
 
 
 def test_temperature_boundary_and_garbage():
+    """The garbage half flipped: a non-numeric reading is now REMOVED.
+
+    It used to be left in the frame on the grounds that it "never raises" in
+    transform_data. It does raise later: Home Assistant rejects a non-numeric
+    state for an entity with a numeric device class, and the coordinator runs
+    its listeners in a bare loop, so the frame's remaining entities never get
+    updated.
+    """
     out = _charger().transform_data({"temperature1": -50, "temperature2": "x"})
     assert out["temperature1"] == -50    # exactly -50 is still a reading
-    assert out["temperature2"] == "x"    # non-numeric left alone, never raises
+    assert "temperature2" not in out
 
 
 @pytest.mark.parametrize("garbage", [None, "", "abc", [], {}, float("nan")])
@@ -200,3 +209,102 @@ def test_unparseable_time_msg_does_not_kill_the_poll(garbage):
     """
     out = _charger().transform_data({"systemTime": 1751884800, "timeMsg": garbage})
     assert out["systemTime"] is not None
+
+
+# Every shape json.loads or the station can put where a number belongs.
+# "nan" and "inf" as STRINGS matter as much as the bare tokens: Home Assistant
+# parses a string state into a float before checking isfinite, so a quoted one
+# reaches the same ValueError — and C encoders are far likelier to emit that
+# than a bare NaN token.
+_GARBAGE = ["", "abc", [], {}, float("nan"), float("inf"), float("-inf"), "nan", "inf"]
+
+
+@pytest.mark.parametrize("field", ChargerV2.numeric_fields)
+@pytest.mark.parametrize("garbage", _GARBAGE)
+def test_no_numeric_field_carries_garbage_out_of_transform(field, garbage):
+    """The whole closed list, against everything that is not a number.
+
+    Parametrised over the real tuple rather than a copy, so adding a field to
+    the charger adds it here. A field left uncoerced shows up as its own rows
+    failing and nothing else — which is what makes this worth running as a
+    mutation check.
+    """
+    out = _charger().transform_data({field: garbage})
+
+    # Absent or explicitly None — both read as unknown through .get, and both
+    # are safe. What must never happen is the value itself surviving: the
+    # temperatures take the second route, because anything below -50 is the
+    # firmware's "sensor absent" sentinel and -inf lands there first.
+    assert out.get(field) is None, f"{field}={garbage!r} reached the frame"
+
+
+@pytest.mark.parametrize("field", ChargerV2.numeric_fields)
+def test_a_real_number_is_left_exactly_as_it_arrived(field):
+    """Validation, not conversion.
+
+    Replacing the value with the parsed float would turn every integer field
+    into a float, and HA renders a float state through a float format — so
+    recorded states would go from "30" to "30.0" and string comparisons in
+    user templates would quietly change meaning.
+    """
+    out = _charger().transform_data({field: 30})
+
+    assert out[field] == 30
+    assert isinstance(out[field], int), "an int must not become a float"
+
+
+def test_garbage_is_named_once_per_charger_not_once_per_poll(caplog):
+    charger = _charger()
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            charger.transform_data({"totalEnergy": "abc"})
+
+    lines = [r for r in caplog.records if "unparseable numeric field" in r.message]
+    assert len(lines) == 1, "a station gone bad would fill the log forever"
+    assert "totalEnergy" in lines[0].getMessage()
+
+
+def test_two_chargers_warn_independently(caplog):
+    """The flag is a class-level default, written through self.
+
+    One station going bad must not silence the other. Sharing a single flag is
+    the natural misreading of "the two generations do not keep two copies".
+    """
+    first, second = ChargerV2("1.2.3.4"), ChargerV2("5.6.7.8")
+    with caplog.at_level(logging.WARNING):
+        first.transform_data({"totalEnergy": "abc"})
+        second.transform_data({"totalEnergy": "abc"})
+
+    lines = [r for r in caplog.records if "unparseable numeric field" in r.message]
+    assert len(lines) == 2
+    assert {"1.2.3.4", "5.6.7.8"} == {line.getMessage().split(":")[0] for line in lines}
+
+
+def test_the_coerced_field_list_is_pinned():
+    """The sweep above parametrises over the tuple, so it cannot police it.
+
+    Delete a field from numeric_fields and that field's rows simply stop
+    existing — the suite shrinks and stays green. Caught by mutation: removing
+    currentSet took the count from 682 to 672 with nothing red. So the list
+    itself is pinned here, and the exclusions are named rather than implied.
+    """
+    assert set(ChargerV2.numeric_fields) == {
+        "currentSet", "curDesign", "curMeas1", "voltMeas1", "powerMeas",
+        "temperature1", "temperature2", "aiVoltage", "aiModecurrent",
+        "sessionTime", "sessionEnergy", "totalEnergy", "leakValue",
+        "vBat", "RSSI", "IEM1", "IEM2", "minCurrent",
+    }
+
+    numeric_in_capabilities = {
+        "currentSet", "curDesign", "curMeas1", "voltMeas1", "powerMeas",
+        "temperature1", "temperature2", "aiVoltage", "aiModecurrent",
+        "sessionTime", "sessionEnergy", "totalEnergy", "leakValue",
+        "vBat", "RSSI", "IEM1", "IEM2",
+        # Deliberately NOT coerced, each for its own reason:
+        "state", "subState", "aiStatus",   # mapped to strings before anyone reads them
+        "systemTime",                      # own handling; dropping breaks the absent-clock contract
+        "evseEnabled", "ground", "groundCtrl",   # 0/1 flags compared as ints
+    }
+    assert numeric_in_capabilities <= _charger().capabilities | {"minCurrent"}, (
+        "a capability was renamed without this list being revisited"
+    )

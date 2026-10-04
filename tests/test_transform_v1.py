@@ -199,3 +199,45 @@ def test_an_absent_key_is_not_reported_as_garbage(caplog):
     with caplog.at_level(logging.WARNING):
         _charger().transform_data({"state": 6})
     assert not [r for r in caplog.records if "unparseable numeric" in r.getMessage()]
+
+
+_GARBAGE = ["", "abc", [], {}, float("nan"), float("inf"), float("-inf"), "nan", "inf"]
+
+
+@pytest.mark.parametrize("field", ChargerV1.numeric_fields)
+@pytest.mark.parametrize("garbage", _GARBAGE)
+def test_no_numeric_field_carries_garbage_out_of_transform(field, garbage):
+    """The V1 mirror of the V2 sweep.
+
+    These fields reached entities raw until now; the four that are rescaled by
+    hand (voltMeas1, curMeas1, sessionEnergy, totalEnergy) were already covered
+    and are tested above.
+    """
+    out = _charger().transform_data({field: garbage})
+
+    assert out.get(field) is None, f"{field}={garbage!r} reached the frame"
+
+
+def test_two_v1_chargers_warn_independently(caplog):
+    first, second = ChargerV1("1.2.3.4"), ChargerV1("5.6.7.8")
+    with caplog.at_level(logging.WARNING):
+        first.transform_data({"currentSet": "abc"})
+        second.transform_data({"currentSet": "abc"})
+
+    lines = [r for r in caplog.records if "unparseable numeric field" in r.message]
+    assert len(lines) == 2
+
+
+def test_the_v1_coerced_field_list_is_pinned():
+    """Same reason as on V2: the sweep parametrises over this tuple.
+
+    The four rescaled by hand are absent on purpose — they are validated
+    inside transform_data and covered by the scaling tests above.
+    """
+    assert set(ChargerV1.numeric_fields) == {
+        "currentSet", "curDesign", "sessionTime", "leakValue",
+        "aiVoltage", "aiModecurrent", "temperature1", "temperature2",
+    }
+    assert not set(ChargerV1.numeric_fields) & {
+        "voltMeas1", "curMeas1", "sessionEnergy", "totalEnergy",
+    }, "a rescaled field must not be validated twice"

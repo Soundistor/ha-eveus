@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from math import isfinite
 
 import aiohttp
+
+_LOGGER = logging.getLogger(__name__)
 
 _FORM_HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
 _TIMEOUT = aiohttp.ClientTimeout(total=10)
@@ -94,6 +97,18 @@ class BaseCharger:
     # from "this generation has nothing to read": the base implementation
     # below is a no-op, so it never records one and never warns.
     sw_version_error: str | None = None
+
+    # A class-level DEFAULT, never written at class level: _warn_once_on_garbage
+    # assigns through self, which shadows it per instance. Two configured
+    # chargers therefore warn independently, which is what you want — one
+    # station going bad must not silence the other.
+    _warned_garbage_numeric = False
+
+    # Numeric fields this generation coerces. Named per generation rather than
+    # derived from capabilities: enums already mapped to strings, timestamps
+    # with their own handling and 0/1 flags read as integers must NOT pass
+    # through here, and "every numeric key" leaves that to whoever reads it.
+    numeric_fields: tuple[str, ...] = ()
 
     def __init__(self, ip: str, username: str | None = None,
                  password: str | None = None, hass=None) -> None:
@@ -205,6 +220,63 @@ class BaseCharger:
 
     async def set_enabled(self, enabled: bool) -> None:
         raise NotImplementedError
+
+    def _warn_once_on_garbage(self, raw: dict, numeric: dict) -> None:
+        """Name the bad fields once per charger, not once per poll.
+
+        A poll runs every 30-60 s; a station that starts emitting garbage would
+        otherwise fill the log with the same line forever. An absent key is not
+        garbage — only a key that is present and unparseable is reported.
+        """
+        if self._warned_garbage_numeric:
+            return
+        bad = [key for key, value in numeric.items() if value is None and key in raw]
+        if not bad:
+            return
+        self._warned_garbage_numeric = True
+        _LOGGER.warning(
+            "%s: unparseable numeric field(s) in /main, reported as unknown: %s",
+            self.ip,
+            ", ".join(f"{key}={raw[key]!r}" for key in bad),
+        )
+
+    def _drop_unparseable_numerics(self, raw: dict) -> None:
+        """Remove every listed field the station did not send as a real number.
+
+        Validation, not conversion: a value that parses is left EXACTLY as it
+        arrived. Replacing it with the parsed float would turn every integer
+        field into a float, and Home Assistant renders a float state through a
+        float format — so recorded states would go from "30" to "30.0" and any
+        template comparing the string would quietly change meaning.
+
+        Dropping rather than zeroing, for the reason V1 already documents: a
+        confident 0.0 is acted on by every consumer that guards on `is not
+        None`, while a missing key folds to unknown through .get().
+
+        The point is not tidiness. json.loads accepts the bare tokens NaN,
+        Infinity and -Infinity, and Home Assistant raises ValueError when a
+        numeric entity's state is non-finite. The coordinator calls its
+        listeners in a bare loop, so one such field aborts the chain for that
+        frame and every entity after it silently keeps its previous state while
+        the poll still counts as a success.
+        """
+        if not self.numeric_fields:
+            return
+        # A key already holding None was blanked on purpose — the temperature
+        # sentinel, V1's unparseable clock — and that is not garbage from the
+        # station. Removing it would turn "we know this sensor is absent" into
+        # "this field never came", which reads the same through .get but breaks
+        # the contract three tests pin. Only a present, non-None, unparseable
+        # value is dropped.
+        parsed = {
+            key: as_float(raw[key])
+            for key in self.numeric_fields
+            if raw.get(key) is not None
+        }
+        self._warn_once_on_garbage(raw, parsed)
+        for key, value in parsed.items():
+            if value is None:
+                raw.pop(key, None)
 
     def transform_data(self, raw: dict) -> dict:
         return raw

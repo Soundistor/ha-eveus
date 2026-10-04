@@ -157,24 +157,14 @@ class ChargerV1(BaseCharger):
             "sync_time",
         }
 
-    def _warn_once_on_garbage(self, raw: dict, numeric: dict) -> None:
-        """Name the bad fields once per charger, not once per poll.
-
-        A poll runs every 30-60 s; a station that starts emitting garbage would
-        otherwise fill the log with the same line forever. An absent key is not
-        garbage — only a key that is present and unparseable is reported.
-        """
-        if self._warned_garbage_numeric:
-            return
-        bad = [key for key, value in numeric.items() if value is None and key in raw]
-        if not bad:
-            return
-        self._warned_garbage_numeric = True
-        _LOGGER.warning(
-            "%s: unparseable numeric field(s) in /main, reported as unknown: %s",
-            self.ip,
-            ", ".join(f"{key}={raw[key]!r}" for key in bad),
-        )
+    # The four below are rescaled by hand further down and so are handled
+    # there; these are the rest, which only ever needed validating. Before
+    # this list they reached entities raw, and a NaN among them aborts the
+    # coordinator's listener loop for the frame — the same hole V2 had.
+    numeric_fields = (
+        "currentSet", "curDesign", "sessionTime", "leakValue",
+        "aiVoltage", "aiModecurrent", "temperature1", "temperature2",
+    )
 
     def transform_data(self, raw: dict) -> dict:
         raw = dict(raw)
@@ -188,6 +178,8 @@ class ChargerV1(BaseCharger):
             key: as_float(raw.get(key))
             for key in ("voltMeas1", "curMeas1", "sessionEnergy", "totalEnergy")
         }
+        # These four are rescaled below, so they are parsed here and reported
+        # here; the rest go through _drop_unparseable_numerics at the end.
         self._warn_once_on_garbage(raw, numeric)
         volt = numeric["voltMeas1"]
         cur = numeric["curMeas1"]  # 0.1 A units
@@ -213,6 +205,10 @@ class ChargerV1(BaseCharger):
         for key in ("temperature1", "temperature2"):
             if key in raw:
                 raw[key] = blank_absent_temperature(raw[key])
+        # AFTER the sentinel is blanked, as on V2. The four rescaled fields
+        # above were already validated by hand; this covers the ones that were
+        # passing through raw.
+        self._drop_unparseable_numerics(raw)
         # systemTime: device sends a wall-clock "HH:MM:SS" (no date, no tz).
         # Return it as a naive datetime (today's date, device wall-clock) and let
         # the coordinator localize it to HA's configured timezone — this package
