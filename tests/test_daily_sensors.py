@@ -949,13 +949,18 @@ async def test_a_failure_notification_is_not_read_as_a_frame(hass, clock):
 
 
 async def test_an_upgrade_restore_without_a_stamp_does_not_bill_the_downtime(hass, clock):
-    """The first restart after this release, for a session already in progress.
+    """A restart where the coordinator's own first poll failed as well.
 
-    Storage written by the previous version carries prev_s but no prev_stamp,
-    so the sensor cannot size the gap and the coordinator cannot either. That
-    must read as unobserved. It briefly did not: the delta spanning the whole
-    downtime went through the current gate and counted in full whenever the car
-    happened to be drawing at the moment of the first poll.
+    gap_s is None whenever the first refresh after a start did not succeed —
+    the station being offline at boot, which for these chargers is the normal
+    case. Neither side can size the gap then, and that must read as unobserved
+    rather than as nothing having happened.
+
+    This is NOT the upgrade path, despite the name it was given: on an online
+    start the coordinator polls before the platforms are forwarded and hands
+    the sensor an ordinary gap instead. That path is proved in
+    tests/test_restore_gap.py, through async_setup_entry, because it turns on
+    which value actually arrives — something no hand-fed gap_s can show.
     """
     sensor, coord = _make(DailySessionTimeSensor)
     sensor.hass = hass
@@ -963,8 +968,11 @@ async def test_an_upgrade_restore_without_a_stamp_does_not_bill_the_downtime(has
     mock_restore_cache_with_extra_data(
         hass,
         ((State(sensor.entity_id, STATE_UNAVAILABLE),
+          # Three keys and no more: this is the whole pre-0.5.0 payload.
+          # `incomplete` and `prev_stamp` were both introduced by 0.5.0, so a
+          # fixture carrying either describes a version that never shipped.
           {"date": _DAY.date().isoformat(), "accumulated_s": 0.0,
-           "prev_s": 100.0, "incomplete": False}),),   # old format: no anchor
+           "prev_s": 100.0}),),
     )
     await sensor.async_added_to_hass()
     assert sensor._prev == 100.0 and sensor._prev_stamp is None

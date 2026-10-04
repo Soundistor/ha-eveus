@@ -634,6 +634,10 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         # HA restart, where the coordinator has no previous frame of its own.
         self._prev_total: float | None = None
         self._prev_stamp: datetime | None = None
+        # Set by the restore when storage held a payload but no usable stamp:
+        # the sensor has a past it cannot measure back to. Distinguishes that
+        # from a sensor with no past at all — see _gap_seconds.
+        self._restored_without_stamp: bool = False
 
     @property
     def native_value(self):
@@ -673,6 +677,15 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         values = await _restored_values(self)
         if values is None:
             return
+        # The stamp is restored FIRST and regardless of the stored date: it
+        # records when this sensor last observed anything, which is not a
+        # property of the day it happened on. Every early return below used to
+        # skip it, and a sensor without it cannot size its own gap — so a
+        # restore of yesterday's payload let the first frame lower
+        # day_incomplete on a day whose morning nobody watched.
+        stamp = values.get("prev_stamp")
+        self._prev_stamp = dt_util.parse_datetime(stamp) if stamp else None
+        self._restored_without_stamp = self._prev_stamp is None
         today = dt_util.now().date()
         try:
             stored_date = date.fromisoformat(values.get("date", ""))
@@ -698,8 +711,6 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         self._accumulated = accumulated
         self._prev = previous
         self._prev_total = as_float(values.get("prev_total"))
-        stamp = values.get("prev_stamp")
-        self._prev_stamp = dt_util.parse_datetime(stamp) if stamp else None
         self._attr_last_reset = dt_util.start_of_local_day()
 
     def _reset_for_new_day(self) -> None:
@@ -727,7 +738,20 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
             own = (now - self._prev_stamp).total_seconds()
         coord = self.coordinator.gap_s
         if own is None:
-            return coord
+            # Two different situations, and only one of them is blind.
+            #
+            # Restored from storage that carried no usable stamp: this sensor
+            # existed before the restart and cannot say for how long it was
+            # not looking. The coordinator's gap is no substitute — it spans
+            # two of ITS polls, which equals the sensor's blindness only while
+            # the sensor was alive throughout, and here it was not. Reading it
+            # anyway billed a whole downtime as charging time and cleared
+            # day_incomplete on a morning nobody watched.
+            #
+            # Nothing restored at all: the sensor is new, so there is no
+            # earlier observation of its own to be missing, and the
+            # coordinator's gap honestly describes the interval.
+            return None if self._restored_without_stamp else coord
         if coord is None:
             return own
         # The sensor's own stamp is authoritative and must not merely be a
