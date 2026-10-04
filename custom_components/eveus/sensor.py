@@ -480,9 +480,12 @@ class SessionEnergySensor(ChargerSensor, RestoreEntity):
 # It covers ONE missed poll in any failure mode, not two — the earlier comment
 # claimed two and the arithmetic does not support it. _schedule_refresh runs in
 # the finally of _async_refresh, so the next attempt starts an interval after
-# the previous one FINISHED: one miss costs at most 60 + 10 + 60 = 130 s, while
-# two fast failures already come to 180 plus the response time and two timeouts
-# to 200. The jitter pushes over the line, never under.
+# the previous one FINISHED. At the 60 s idle interval, which is the one in
+# force around midnight: one miss costs 60 + 10 + 60 = 130 s BEFORE the
+# successful poll's own response time, the sw-version fetch on early polls and
+# any wait on the request lock — so treat 130 as a floor, not a bound. Two fast
+# failures already exceed 180 and two timeouts give 200. The jitter pushes over
+# the line, never under, and ~50 s of headroom absorbs the extras above.
 #
 # Kept at 180 rather than raised, because TWO sensors read it with different
 # meanings: DailySessionTimeSensor as the size of a gap, DailyEnergySensor as

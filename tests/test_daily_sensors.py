@@ -1161,3 +1161,76 @@ async def test_the_frame_flag_rides_in_the_persisted_payload(hass, clock):
     sensor, _ = _make(DailySessionTimeSensor)
     sensor._day_had_frame = True
     assert sensor.extra_restore_state_data.as_dict()["day_had_frame"] is True
+
+
+def test_a_KNOWN_gap_is_clipped_too_not_only_an_unknown_one(clock):
+    """The branch the other clip tests never reach.
+
+    Those build the sensor fresh, so it has no stamp and _gap_seconds returns
+    None whatever gap_s says — they exercise the "unknown" half and leave
+    min(gap, bound) unprotected. Replacing min(gap, bound) with gap kept them
+    all green.
+
+    Here the sensor really remembers 20:00 and the coordinator really reports
+    four hours, so a gap arrives and has to be clipped rather than replaced.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+    sensor._prev_stamp = _midnight() - timedelta(hours=4)   # 20:00 yesterday
+
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0,
+            gap_s=4 * 3600, frame_time=_midnight() + timedelta(seconds=30))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+
+
+async def test_a_restart_between_midnight_and_the_first_frame(hass, clock):
+    """The case the persisted flag exists for, restoring it as False.
+
+    The timer rolled the day over and HA went down before any frame arrived,
+    so day_had_frame was genuinely False. Restored, the first frame must still
+    be treated as the day's first: it clips, and the day reads complete.
+    Nothing else in the suite restores a False.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_smoke"
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, STATE_UNAVAILABLE),
+          {"date": _DAY.date().isoformat(), "accumulated_s": 0.0,
+           "prev_s": None, "incomplete": True, "day_had_frame": False,
+           "prev_stamp": (_midnight() - timedelta(hours=4)).isoformat()}),),
+    )
+    await sensor.async_added_to_hass()
+    assert sensor._day_had_frame is False, "a stored False must survive"
+
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0,
+            gap_s=4 * 3600, frame_time=_midnight() + timedelta(seconds=30))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+
+
+async def test_the_frame_flag_survives_a_round_trip(hass, clock):
+    """Write it, read it back, and get the same answer.
+
+    Asserting the payload alone could not tell a real value from a constant:
+    a version that always wrote True and always restored True passed the
+    whole suite.
+    """
+    writer, _ = _make(DailySessionTimeSensor)
+    writer._current_date = _DAY.date()
+    writer._day_had_frame = False
+    payload = writer.extra_restore_state_data.as_dict()
+    assert payload["day_had_frame"] is False
+
+    reader, _ = _make(DailySessionTimeSensor)
+    reader.hass = hass
+    reader.entity_id = "sensor.eveus_smoke2"
+    mock_restore_cache_with_extra_data(
+        hass, ((State(reader.entity_id, STATE_UNAVAILABLE), payload),)
+    )
+    await reader.async_added_to_hass()
+
+    assert reader._day_had_frame is False
