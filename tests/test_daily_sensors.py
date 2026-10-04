@@ -722,6 +722,66 @@ def test_daily_energy_counts_a_baseline_from_just_before_midnight_as_complete(cl
     assert sensor.extra_state_attributes["day_incomplete"] is False
 
 
+def test_a_gap_that_ends_just_after_midnight_leaves_the_day_complete(clock):
+    """A night-long gap costs this day only the part of it after midnight.
+
+    The station went offline at 20:00 and came back at 00:00:30. Four hours
+    were unwatched, but thirty seconds of them were THIS day's, and the rest
+    belongs to yesterday, which has its own verdict. The docstring on
+    _judge_gap promised this; the code judged the whole gap and marked the day
+    incomplete.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0,
+            gap_s=4 * 3600, frame_time=_midnight() + timedelta(seconds=30))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+
+
+def test_the_same_gap_ending_later_in_the_morning_does_not(clock):
+    """The other side of the clip: ten minutes in, ten minutes were missed."""
+    sensor, coord = _make(DailySessionTimeSensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0,
+            gap_s=4 * 3600, frame_time=_midnight() + timedelta(minutes=10))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
+def test_an_unknown_gap_is_clipped_by_the_day_boundary_too(clock):
+    """Nothing persisted, and the first frame lands 30 s into the day.
+
+    "Unknown gap" normally reads as unobserved, but the bound is a fact about
+    the day rather than about what this sensor remembers: at 00:00:30 at most
+    thirty seconds of today can have been missed, whatever the sensor knows.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0,
+            gap_s=None, frame_time=_midnight() + timedelta(seconds=30))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is False
+
+
+def test_an_unknown_gap_mid_day_still_reads_as_unobserved(clock):
+    """The clip must not turn "cannot know" into "nothing happened"."""
+    sensor, coord = _make(DailySessionTimeSensor)
+    clock["now"] = _DAY
+    sensor._roll_over_at_midnight(None)
+
+    _update(sensor, coord, sessionTime=100, curMeas1=16.0,
+            gap_s=None, frame_time=_midnight() + timedelta(hours=9))
+
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
 def test_a_web_ui_counter_reset_does_not_mark_the_day_incomplete(clock):
     """The other way into the rebase branch — and the day was watched throughout."""
     sensor, coord = _make(DailyEnergySensor)
@@ -1041,3 +1101,63 @@ async def test_the_flag_survives_a_restart_within_the_same_day(hass, clock, cls,
     await sensor.async_added_to_hass()
 
     assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
+async def test_a_restart_does_not_erase_a_quiet_hour(hass, clock):
+    """The verdict on a day survives a restart in the middle of it.
+
+    A payload written at 13:00 with the flag already raised by a quiet hour at
+    noon, restored two minutes later. The gap is short, so if the sensor also
+    believed this were the day's first frame it would LOWER the flag and call
+    a day complete that had genuinely lost an hour. That is why
+    _day_had_frame is persisted rather than assumed.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_smoke"
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, STATE_UNAVAILABLE),
+          {"date": _DAY.date().isoformat(), "accumulated_s": 3600.0,
+           "prev_s": 3700.0, "incomplete": True, "day_had_frame": True,
+           "prev_stamp": (dt_util.utcnow() - timedelta(minutes=2)).isoformat()}),),
+    )
+    await sensor.async_added_to_hass()
+
+    _update(sensor, coord, sessionTime=3820, curMeas1=16.0, gap_s=120.0,
+            frame_time=dt_util.utcnow())
+
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
+async def test_storage_without_the_key_defaults_to_the_safe_side(hass, clock):
+    """Payloads written before this key existed must not clear a verdict.
+
+    The same scenario, restored from storage that predates day_had_frame. The
+    absent key has to read as True: False would let every upgrade erase
+    whatever verdict the day had reached.
+    """
+    sensor, coord = _make(DailySessionTimeSensor)
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_smoke"
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, STATE_UNAVAILABLE),
+          {"date": _DAY.date().isoformat(), "accumulated_s": 3600.0,
+           "prev_s": 3700.0, "incomplete": True,
+           "prev_stamp": (dt_util.utcnow() - timedelta(minutes=2)).isoformat()}),),
+    )
+    await sensor.async_added_to_hass()
+    assert sensor._day_had_frame is True
+
+    _update(sensor, coord, sessionTime=3820, curMeas1=16.0, gap_s=120.0,
+            frame_time=dt_util.utcnow())
+
+    assert sensor.extra_state_attributes["day_incomplete"] is True
+
+
+async def test_the_frame_flag_rides_in_the_persisted_payload(hass, clock):
+    """It has to be written as well as read, or the restore has nothing."""
+    sensor, _ = _make(DailySessionTimeSensor)
+    sensor._day_had_frame = True
+    assert sensor.extra_restore_state_data.as_dict()["day_had_frame"] is True

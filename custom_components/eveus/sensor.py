@@ -475,8 +475,22 @@ class SessionEnergySensor(ChargerSensor, RestoreEntity):
 # Named as a number on purpose: the poll interval is dynamic (30/60 s,
 # coordinator.py) and flips on the very frame being judged, and a WRITE_SETTLE
 # refresh shifts the grid, so deriving the tolerance from update_interval judges
-# the day by an interval that was not in force for most of it. 180 s clears two
-# of the longest intervals with room for jitter.
+# the day by an interval that was not in force for most of it.
+#
+# It covers ONE missed poll in any failure mode, not two — the earlier comment
+# claimed two and the arithmetic does not support it. _schedule_refresh runs in
+# the finally of _async_refresh, so the next attempt starts an interval after
+# the previous one FINISHED: one miss costs at most 60 + 10 + 60 = 130 s, while
+# two fast failures already come to 180 plus the response time and two timeouts
+# to 200. The jitter pushes over the line, never under.
+#
+# Kept at 180 rather than raised, because TWO sensors read it with different
+# meanings: DailySessionTimeSensor as the size of a gap, DailyEnergySensor as
+# how late the day's baseline was taken. Raising it to cover two misses would
+# also accept a baseline four minutes after midnight as a complete day — up to
+# 0.47 kWh at 7 kW silently missing from a day that claims to be whole. What
+# 180 costs instead is a day wrongly marked incomplete after two consecutive
+# misses, which is the miss direction and the cheaper one.
 _OBSERVATION_TOLERANCE_S = 180
 
 # Attribute both daily sensors carry. The value says what the integration
@@ -740,6 +754,7 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
                 "accumulated_s": self._accumulated,
                 "prev_s": self._prev,
                 "incomplete": self._incomplete,
+                "day_had_frame": self._day_had_frame,
                 "prev_total": self._prev_total,
                 "prev_stamp": (
                     self._prev_stamp.isoformat() if self._prev_stamp else None
@@ -778,10 +793,17 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
             return
         self._current_date = stored_date
         self._incomplete = bool(values.get("incomplete", True))
-        # Mid-day by definition: frames have already happened, so a small gap
-        # after the restart must not be read as "the day was watched from the
-        # start" and clear a flag raised before it.
-        self._day_had_frame = True
+        # Persisted alongside the flag it protects, because assuming it costs a
+        # verdict: a payload written at 13:00 with incomplete raised by a quiet
+        # hour at noon, restored after a two-minute restart, would have a short
+        # gap AND a lowered _day_had_frame — and _judge_gap would clear the
+        # flag on a day that had genuinely lost an hour.
+        #
+        # Absent from the payload it defaults to True, never False. Storage
+        # written before this key existed, and the attribute-only fallback
+        # which never carries it, both come from a day already under way; the
+        # default has to be the one that cannot erase a verdict.
+        self._day_had_frame = bool(values.get("day_had_frame", True))
         self._accumulated = accumulated
         self._prev = previous
         self._prev_total = as_float(values.get("prev_total"))
@@ -837,6 +859,19 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         # half an hour with the station online throughout.
         return max(own, coord)
 
+    def _seconds_into_today(self) -> float | None:
+        """How much of today this frame could possibly have missed.
+
+        Measured from the frame's own time, the convention everywhere else
+        here: utcnow() runs up to an interval plus the timeout later than the
+        reading it would be judging. Negative when the frame sits just before
+        midnight, which is a complete day by definition, so it clamps to zero.
+        """
+        frame_time = self.coordinator.frame_time
+        if frame_time is None:
+            return None
+        return max(0.0, (frame_time - dt_util.start_of_local_day()).total_seconds())
+
     def _judge_gap(self, gap: float | None) -> None:
         """The time sensor's criterion: was any interval of this day unwatched?
 
@@ -847,10 +882,29 @@ class DailySessionTimeSensor(_MidnightRollover, ChargerSensor, RestoreEntity):
         complete day for energy and a complete day here too; one that went
         quiet at noon for an hour has a complete baseline and an incomplete day.
         """
+        if not self._day_had_frame:
+            # On the day's FIRST frame, only the part of the gap that falls
+            # inside today was unwatched today — the rest belongs to yesterday,
+            # which has its own verdict. Without this, a station offline since
+            # 20:00 whose first frame lands at 00:00:30 is marked incomplete,
+            # against what the docstring above promises.
+            #
+            # An unknown gap is clipped too, rather than staying unknown: the
+            # bound is a fact about the day, and it does not depend on whether
+            # this sensor kept a stamp. A frame 30 s after midnight leaves at
+            # most 30 s of today unobserved however little the sensor
+            # remembers.
+            #
+            # Only here: mid-day the bound is hours and the clip is a no-op,
+            # and on neither rollover path is a delta computed on this frame
+            # (_prev is None), so the delta gate never sees the clipped value.
+            bound = self._seconds_into_today()
+            if bound is not None:
+                gap = bound if gap is None else min(gap, bound)
+
         if gap is None or gap > _OBSERVATION_TOLERANCE_S:
-            # None means the coordinator has no previous frame — its first poll
-            # after a start. We cannot know what happened before it, and
-            # "cannot know" is not "nothing happened".
+            # None means neither the coordinator nor our own stamp can size the
+            # blindness. "Cannot know" is not "nothing happened".
             self._incomplete = True
         elif not self._day_had_frame:
             # The first frame of the day, and it followed its predecessor
