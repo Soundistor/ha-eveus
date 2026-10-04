@@ -129,10 +129,21 @@ class ChargerV2(BaseCharger):
         sys_time = raw.get("systemTime")
         if as_enum_int(raw.get("timeMsg", 0)) == 1:
             raw["systemTime"] = None
-        elif sys_time:
+        # `is not None` rather than truthiness, as on V1: "", [] and {} are
+        # falsy and were left in the frame untouched, reaching a TIMESTAMP
+        # entity. An epoch of 0 is also falsy and is a real reading.
+        elif sys_time is not None:
             try:
                 offset = int(raw.get("timeZone", 0)) * 3600
                 raw["systemTime"] = datetime.fromtimestamp(int(sys_time) - offset, tz=UTC)
-            except (ValueError, OSError, TypeError):
+            # OverflowError belongs here as much as the rest: int(inf) raises
+            # it, and so does an epoch beyond the platform's range. These two
+            # fields are left out of numeric_fields on the grounds that they
+            # handle their own garbage — which was true of NaN, where int()
+            # raises ValueError, and false of Infinity. Uncaught it escapes
+            # transform_data, the coordinator reports UpdateFailed, and EVERY
+            # entity goes unavailable for as long as the station keeps sending
+            # it: worse than the single-sensor damage this file exists to stop.
+            except (ValueError, OSError, TypeError, OverflowError):
                 raw["systemTime"] = None
         return raw

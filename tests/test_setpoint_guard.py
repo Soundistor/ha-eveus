@@ -178,13 +178,15 @@ async def test_nan_is_never_called_plausible(hass):
     # exactly this reason) removes that claim: the guard now says nothing about
     # the value.
     #
-    # It still reaches the entity, and that is deliberate scope: dropping
-    # unparseable values is garbage handling, which this item excluded, and on
-    # V2 a nan reached the entity before any of this existed — so removing it
-    # here would be a new behaviour smuggled in under a guard. Tracked
-    # separately in TODO.md.
+    # The second half — whether nan reaches the entity — is NOT tested here
+    # and must not be read off this test. The _Charger stub's transform_data
+    # returns raw untouched, on purpose, so the guard can be driven with
+    # values a real charger would never hand it. In production both
+    # generations drop the field before the coordinator sees it; that is
+    # pinned in test_transform_v1.py and test_transform_v2.py, against the
+    # real transform_data.
     assert coord._setpoint_dropped == 0
-    assert data["currentSet"] != data["currentSet"]   # still nan, untouched
+    assert data is not None
 
 
 async def test_a_confirmed_low_does_not_disarm_the_guard(hass, freezer):

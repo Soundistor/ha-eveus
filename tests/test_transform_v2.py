@@ -308,3 +308,30 @@ def test_the_coerced_field_list_is_pinned():
     assert numeric_in_capabilities <= _charger().capabilities | {"minCurrent"}, (
         "a capability was renamed without this list being revisited"
     )
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [
+        {"systemTime": 1751884800, "timeZone": float("inf")},
+        {"systemTime": float("inf"), "timeZone": 2},
+        {"systemTime": 10 ** 30, "timeZone": 2},
+        {"systemTime": float("nan"), "timeZone": 2},
+        {"systemTime": [], "timeZone": 2},
+        {"systemTime": "", "timeZone": 2},
+        {"systemTime": {}, "timeZone": 2},
+    ],
+)
+def test_a_poisoned_clock_does_not_fail_the_whole_poll(frame):
+    """These two fields are excluded from coercion — so they must cope alone.
+
+    The exclusion was justified by "they handle their own garbage", which held
+    for NaN (int() raises ValueError, already caught) and not for Infinity:
+    int(inf) raises OverflowError, which escaped transform_data entirely. The
+    coordinator then reports UpdateFailed and EVERY entity goes unavailable
+    for as long as the station keeps sending it — worse than the single stale
+    sensor this whole file exists to prevent.
+    """
+    out = _charger().transform_data(frame)
+
+    assert out["systemTime"] is None

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
+from math import isfinite
 import re
 
 from .base import (
@@ -40,7 +41,6 @@ class ChargerV1(BaseCharger):
     write_ack = None
 
     # Set on the instance the first time a garbage numeric field is seen.
-    _warned_garbage_numeric = False
 
     async def set_enabled(self, enabled: bool) -> None:
         """Start charging. V1 cannot be stopped remotely — say so, don't pretend.
@@ -185,8 +185,14 @@ class ChargerV1(BaseCharger):
         cur = numeric["curMeas1"]  # 0.1 A units
         # powerMeas = V × I × 0.1  (raw curMeas1 in 0.1A units), derived only
         # when both factors are real
-        if volt is not None and cur is not None:
-            raw["powerMeas"] = round(volt * cur * 0.1, 1)
+        # isfinite on the PRODUCT, not just on the factors: two finite inputs
+        # can overflow to inf, and round(inf, 1) returns inf, which then
+        # reaches the entity. A derived field is covered by nothing else —
+        # powerMeas is not in numeric_fields here because it is computed, not
+        # received.
+        power = None if volt is None or cur is None else volt * cur * 0.1
+        if power is not None and isfinite(power):
+            raw["powerMeas"] = round(power, 1)
         else:
             raw.pop("powerMeas", None)
         # voltMeas1 is not rescaled and stays pass-through when it parses — the
@@ -216,13 +222,22 @@ class ChargerV1(BaseCharger):
         # the OS-local tz would make the derived time_drift wrong when HA runs in
         # a different timezone than the host.
         sys_time = raw.get("systemTime")
-        if sys_time:
+        # `is not None`, not truthiness: an empty string, an empty list and an
+        # empty dict are all falsy, so a truthiness test left them sitting in
+        # the frame untouched and they reached a TIMESTAMP entity. Present
+        # means judged; absent stays absent.
+        if sys_time is not None:
             try:
                 t = datetime.strptime(sys_time, "%H:%M:%S").time()
                 raw["systemTime"] = datetime.now().replace(
                     hour=t.hour, minute=t.minute, second=t.second, microsecond=0
                 )
-            except ValueError:
+            # TypeError too: strptime raises it for anything that is not a
+            # string, and this field is left out of numeric_fields precisely
+            # because it is meant to be one. A number here — garbage, or a
+            # firmware that switched to an epoch — escaped transform_data and
+            # failed the whole poll.
+            except (ValueError, TypeError):
                 raw["systemTime"] = None
         return raw
 

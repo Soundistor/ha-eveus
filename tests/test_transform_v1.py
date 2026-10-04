@@ -241,3 +241,45 @@ def test_the_v1_coerced_field_list_is_pinned():
     assert not set(ChargerV1.numeric_fields) & {
         "voltMeas1", "curMeas1", "sessionEnergy", "totalEnergy",
     }, "a rescaled field must not be validated twice"
+
+
+@pytest.mark.parametrize("sys_time", [123, float("inf"), float("nan"), [], {}])
+def test_a_non_string_clock_does_not_fail_the_whole_poll(sys_time):
+    """systemTime is excluded from coercion because it is meant to be a string.
+
+    strptime raises TypeError on anything that is not one, and only ValueError
+    was caught — so a numeric clock escaped transform_data and failed the poll
+    for every entity at once.
+    """
+    out = _charger().transform_data({"systemTime": sys_time})
+
+    assert out["systemTime"] is None
+
+
+def test_a_derived_power_that_overflows_is_not_published():
+    """powerMeas is computed here, so no field list covers it.
+
+    Two finite factors can multiply to inf, and round(inf, 1) is inf, which
+    reaches the entity and makes HA raise.
+    """
+    out = _charger().transform_data({"voltMeas1": 1e308, "curMeas1": 1e308})
+
+    assert "powerMeas" not in out
+
+
+@pytest.mark.parametrize(
+    "garbage", [float("inf"), float("-inf"), "nan", "inf"]
+)
+@pytest.mark.parametrize(
+    "field", ["voltMeas1", "curMeas1", "sessionEnergy", "totalEnergy"]
+)
+def test_the_rescaled_fields_reject_the_same_garbage_as_the_rest(field, garbage):
+    """The four hand-rescaled fields were pinned against a shorter list.
+
+    They are validated by their own as_float pass rather than by
+    numeric_fields, so the sweep above does not reach them, and inf/-inf and
+    the quoted forms were never exercised on them.
+    """
+    out = _charger().transform_data({field: garbage})
+
+    assert out.get(field) is None
