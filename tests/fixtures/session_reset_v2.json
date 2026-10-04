@@ -1,0 +1,1047 @@
+{
+ "source": ".claude/ralph/reset-v2-2026-09-27.log",
+ "captured": "2026-09-27",
+ "note": "Dense capture while the owner unplugged and replugged the cable twice. Counters are in kWh, already scaled as the charger module scales them. Three charging sessions, so two real resets.",
+ "frames": [
+  {
+   "t": "10:08:59",
+   "sessionEnergy": 3.846,
+   "totalEnergy": 4480.187988
+  },
+  {
+   "t": "10:09:03",
+   "sessionEnergy": 3.848,
+   "totalEnergy": 4480.189941
+  },
+  {
+   "t": "10:09:07",
+   "sessionEnergy": 3.85,
+   "totalEnergy": 4480.191895
+  },
+  {
+   "t": "10:09:10",
+   "sessionEnergy": 3.852,
+   "totalEnergy": 4480.193848
+  },
+  {
+   "t": "10:09:14",
+   "sessionEnergy": 3.855,
+   "totalEnergy": 4480.196777
+  },
+  {
+   "t": "10:09:17",
+   "sessionEnergy": 3.856,
+   "totalEnergy": 4480.198242
+  },
+  {
+   "t": "10:09:21",
+   "sessionEnergy": 3.859,
+   "totalEnergy": 4480.201172
+  },
+  {
+   "t": "10:09:25",
+   "sessionEnergy": 3.86,
+   "totalEnergy": 4480.202148
+  },
+  {
+   "t": "10:09:28",
+   "sessionEnergy": 3.862,
+   "totalEnergy": 4480.204102
+  },
+  {
+   "t": "10:09:32",
+   "sessionEnergy": 3.865,
+   "totalEnergy": 4480.207031
+  },
+  {
+   "t": "10:09:35",
+   "sessionEnergy": 3.867,
+   "totalEnergy": 4480.208984
+  },
+  {
+   "t": "10:09:39",
+   "sessionEnergy": 3.869,
+   "totalEnergy": 4480.210938
+  },
+  {
+   "t": "10:09:43",
+   "sessionEnergy": 3.871,
+   "totalEnergy": 4480.212891
+  },
+  {
+   "t": "10:09:46",
+   "sessionEnergy": 3.873,
+   "totalEnergy": 4480.214844
+  },
+  {
+   "t": "10:09:50",
+   "sessionEnergy": 3.876,
+   "totalEnergy": 4480.217773
+  },
+  {
+   "t": "10:09:53",
+   "sessionEnergy": 3.877,
+   "totalEnergy": 4480.219238
+  },
+  {
+   "t": "10:09:57",
+   "sessionEnergy": 3.88,
+   "totalEnergy": 4480.222168
+  },
+  {
+   "t": "10:10:01",
+   "sessionEnergy": 3.882,
+   "totalEnergy": 4480.224121
+  },
+  {
+   "t": "10:10:04",
+   "sessionEnergy": 3.883,
+   "totalEnergy": 4480.225098
+  },
+  {
+   "t": "10:10:08",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:11",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:15",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:19",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:22",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:26",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:29",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:33",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:37",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:40",
+   "sessionEnergy": 3.886,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:44",
+   "sessionEnergy": 0.0,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:47",
+   "sessionEnergy": 0.0,
+   "totalEnergy": 4480.228027
+  },
+  {
+   "t": "10:10:51",
+   "sessionEnergy": 0.003,
+   "totalEnergy": 4480.230957
+  },
+  {
+   "t": "10:10:55",
+   "sessionEnergy": 0.005,
+   "totalEnergy": 4480.23291
+  },
+  {
+   "t": "10:10:58",
+   "sessionEnergy": 0.007,
+   "totalEnergy": 4480.234863
+  },
+  {
+   "t": "10:11:02",
+   "sessionEnergy": 0.009,
+   "totalEnergy": 4480.236816
+  },
+  {
+   "t": "10:11:05",
+   "sessionEnergy": 0.011,
+   "totalEnergy": 4480.23877
+  },
+  {
+   "t": "10:11:09",
+   "sessionEnergy": 0.014,
+   "totalEnergy": 4480.242188
+  },
+  {
+   "t": "10:11:13",
+   "sessionEnergy": 0.016,
+   "totalEnergy": 4480.244141
+  },
+  {
+   "t": "10:11:16",
+   "sessionEnergy": 0.017,
+   "totalEnergy": 4480.245117
+  },
+  {
+   "t": "10:11:20",
+   "sessionEnergy": 0.02,
+   "totalEnergy": 4480.248047
+  },
+  {
+   "t": "10:11:23",
+   "sessionEnergy": 0.021,
+   "totalEnergy": 4480.249023
+  },
+  {
+   "t": "10:11:27",
+   "sessionEnergy": 0.024,
+   "totalEnergy": 4480.251953
+  },
+  {
+   "t": "10:11:31",
+   "sessionEnergy": 0.026,
+   "totalEnergy": 4480.253906
+  },
+  {
+   "t": "10:11:34",
+   "sessionEnergy": 0.028,
+   "totalEnergy": 4480.255859
+  },
+  {
+   "t": "10:11:38",
+   "sessionEnergy": 0.03,
+   "totalEnergy": 4480.257812
+  },
+  {
+   "t": "10:11:41",
+   "sessionEnergy": 0.032,
+   "totalEnergy": 4480.259766
+  },
+  {
+   "t": "10:11:45",
+   "sessionEnergy": 0.035,
+   "totalEnergy": 4480.263184
+  },
+  {
+   "t": "10:11:49",
+   "sessionEnergy": 0.037,
+   "totalEnergy": 4480.265137
+  },
+  {
+   "t": "10:11:53",
+   "sessionEnergy": 0.039,
+   "totalEnergy": 4480.26709
+  },
+  {
+   "t": "10:11:56",
+   "sessionEnergy": 0.041,
+   "totalEnergy": 4480.269043
+  },
+  {
+   "t": "10:12:00",
+   "sessionEnergy": 0.043,
+   "totalEnergy": 4480.270996
+  },
+  {
+   "t": "10:12:04",
+   "sessionEnergy": 0.045,
+   "totalEnergy": 4480.272949
+  },
+  {
+   "t": "10:12:08",
+   "sessionEnergy": 0.048,
+   "totalEnergy": 4480.275879
+  },
+  {
+   "t": "10:12:12",
+   "sessionEnergy": 0.049,
+   "totalEnergy": 4480.276855
+  },
+  {
+   "t": "10:12:15",
+   "sessionEnergy": 0.052,
+   "totalEnergy": 4480.279785
+  },
+  {
+   "t": "10:12:19",
+   "sessionEnergy": 0.054,
+   "totalEnergy": 4480.282227
+  },
+  {
+   "t": "10:12:23",
+   "sessionEnergy": 0.056,
+   "totalEnergy": 4480.28418
+  },
+  {
+   "t": "10:12:27",
+   "sessionEnergy": 0.058,
+   "totalEnergy": 4480.286133
+  },
+  {
+   "t": "10:12:30",
+   "sessionEnergy": 0.061,
+   "totalEnergy": 4480.289062
+  },
+  {
+   "t": "10:12:34",
+   "sessionEnergy": 0.063,
+   "totalEnergy": 4480.291016
+  },
+  {
+   "t": "10:12:38",
+   "sessionEnergy": 0.065,
+   "totalEnergy": 4480.292969
+  },
+  {
+   "t": "10:12:41",
+   "sessionEnergy": 0.067,
+   "totalEnergy": 4480.294922
+  },
+  {
+   "t": "10:12:45",
+   "sessionEnergy": 0.07,
+   "totalEnergy": 4480.297852
+  },
+  {
+   "t": "10:12:49",
+   "sessionEnergy": 0.071,
+   "totalEnergy": 4480.298828
+  },
+  {
+   "t": "10:12:53",
+   "sessionEnergy": 0.074,
+   "totalEnergy": 4480.301758
+  },
+  {
+   "t": "10:12:56",
+   "sessionEnergy": 0.075,
+   "totalEnergy": 4480.303223
+  },
+  {
+   "t": "10:13:00",
+   "sessionEnergy": 0.078,
+   "totalEnergy": 4480.306152
+  },
+  {
+   "t": "10:13:04",
+   "sessionEnergy": 0.08,
+   "totalEnergy": 4480.308105
+  },
+  {
+   "t": "10:13:07",
+   "sessionEnergy": 0.082,
+   "totalEnergy": 4480.310059
+  },
+  {
+   "t": "10:13:11",
+   "sessionEnergy": 0.084,
+   "totalEnergy": 4480.312012
+  },
+  {
+   "t": "10:13:15",
+   "sessionEnergy": 0.086,
+   "totalEnergy": 4480.313965
+  },
+  {
+   "t": "10:13:19",
+   "sessionEnergy": 0.089,
+   "totalEnergy": 4480.316895
+  },
+  {
+   "t": "10:13:23",
+   "sessionEnergy": 0.091,
+   "totalEnergy": 4480.318848
+  },
+  {
+   "t": "10:13:26",
+   "sessionEnergy": 0.093,
+   "totalEnergy": 4480.320801
+  },
+  {
+   "t": "10:13:30",
+   "sessionEnergy": 0.095,
+   "totalEnergy": 4480.323242
+  },
+  {
+   "t": "10:13:34",
+   "sessionEnergy": 0.098,
+   "totalEnergy": 4480.326172
+  },
+  {
+   "t": "10:13:38",
+   "sessionEnergy": 0.1,
+   "totalEnergy": 4480.328125
+  },
+  {
+   "t": "10:13:42",
+   "sessionEnergy": 0.102,
+   "totalEnergy": 4480.330078
+  },
+  {
+   "t": "10:13:45",
+   "sessionEnergy": 0.104,
+   "totalEnergy": 4480.332031
+  },
+  {
+   "t": "10:13:49",
+   "sessionEnergy": 0.106,
+   "totalEnergy": 4480.333984
+  },
+  {
+   "t": "10:13:53",
+   "sessionEnergy": 0.109,
+   "totalEnergy": 4480.336914
+  },
+  {
+   "t": "10:13:57",
+   "sessionEnergy": 0.11,
+   "totalEnergy": 4480.337891
+  },
+  {
+   "t": "10:14:00",
+   "sessionEnergy": 0.113,
+   "totalEnergy": 4480.34082
+  },
+  {
+   "t": "10:14:04",
+   "sessionEnergy": 0.115,
+   "totalEnergy": 4480.342773
+  },
+  {
+   "t": "10:14:08",
+   "sessionEnergy": 0.117,
+   "totalEnergy": 4480.345215
+  },
+  {
+   "t": "10:14:12",
+   "sessionEnergy": 0.119,
+   "totalEnergy": 4480.347168
+  },
+  {
+   "t": "10:14:15",
+   "sessionEnergy": 0.122,
+   "totalEnergy": 4480.350098
+  },
+  {
+   "t": "10:14:19",
+   "sessionEnergy": 0.124,
+   "totalEnergy": 4480.352051
+  },
+  {
+   "t": "10:14:23",
+   "sessionEnergy": 0.126,
+   "totalEnergy": 4480.354004
+  },
+  {
+   "t": "10:14:27",
+   "sessionEnergy": 0.128,
+   "totalEnergy": 4480.355957
+  },
+  {
+   "t": "10:14:31",
+   "sessionEnergy": 0.131,
+   "totalEnergy": 4480.358887
+  },
+  {
+   "t": "10:14:35",
+   "sessionEnergy": 0.132,
+   "totalEnergy": 4480.359863
+  },
+  {
+   "t": "10:14:38",
+   "sessionEnergy": 0.135,
+   "totalEnergy": 4480.362793
+  },
+  {
+   "t": "10:14:42",
+   "sessionEnergy": 0.136,
+   "totalEnergy": 4480.36377
+  },
+  {
+   "t": "10:14:46",
+   "sessionEnergy": 0.139,
+   "totalEnergy": 4480.367188
+  },
+  {
+   "t": "10:14:50",
+   "sessionEnergy": 0.142,
+   "totalEnergy": 4480.370117
+  },
+  {
+   "t": "10:14:53",
+   "sessionEnergy": 0.143,
+   "totalEnergy": 4480.371094
+  },
+  {
+   "t": "10:14:57",
+   "sessionEnergy": 0.146,
+   "totalEnergy": 4480.374023
+  },
+  {
+   "t": "10:15:01",
+   "sessionEnergy": 0.148,
+   "totalEnergy": 4480.375977
+  },
+  {
+   "t": "10:15:05",
+   "sessionEnergy": 0.15,
+   "totalEnergy": 4480.37793
+  },
+  {
+   "t": "10:15:09",
+   "sessionEnergy": 0.152,
+   "totalEnergy": 4480.379883
+  },
+  {
+   "t": "10:15:12",
+   "sessionEnergy": 0.155,
+   "totalEnergy": 4480.382812
+  },
+  {
+   "t": "10:15:16",
+   "sessionEnergy": 0.157,
+   "totalEnergy": 4480.384766
+  },
+  {
+   "t": "10:15:19",
+   "sessionEnergy": 0.159,
+   "totalEnergy": 4480.387207
+  },
+  {
+   "t": "10:15:23",
+   "sessionEnergy": 0.161,
+   "totalEnergy": 4480.38916
+  },
+  {
+   "t": "10:15:27",
+   "sessionEnergy": 0.163,
+   "totalEnergy": 4480.391113
+  },
+  {
+   "t": "10:15:30",
+   "sessionEnergy": 0.166,
+   "totalEnergy": 4480.394043
+  },
+  {
+   "t": "10:15:34",
+   "sessionEnergy": 0.167,
+   "totalEnergy": 4480.39502
+  },
+  {
+   "t": "10:15:37",
+   "sessionEnergy": 0.169,
+   "totalEnergy": 4480.396973
+  },
+  {
+   "t": "10:15:41",
+   "sessionEnergy": 0.171,
+   "totalEnergy": 4480.398926
+  },
+  {
+   "t": "10:15:45",
+   "sessionEnergy": 0.173,
+   "totalEnergy": 4480.400879
+  },
+  {
+   "t": "10:15:48",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:15:52",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:15:55",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:15:59",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:03",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:06",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:10",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:13",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:17",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:21",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:24",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:28",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:31",
+   "sessionEnergy": 0.176,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:35",
+   "sessionEnergy": 0.0,
+   "totalEnergy": 4480.403809
+  },
+  {
+   "t": "10:16:39",
+   "sessionEnergy": 0.002,
+   "totalEnergy": 4480.405762
+  },
+  {
+   "t": "10:16:42",
+   "sessionEnergy": 0.004,
+   "totalEnergy": 4480.408203
+  },
+  {
+   "t": "10:16:46",
+   "sessionEnergy": 0.006,
+   "totalEnergy": 4480.410156
+  },
+  {
+   "t": "10:16:49",
+   "sessionEnergy": 0.008,
+   "totalEnergy": 4480.412109
+  },
+  {
+   "t": "10:16:53",
+   "sessionEnergy": 0.01,
+   "totalEnergy": 4480.414062
+  },
+  {
+   "t": "10:16:57",
+   "sessionEnergy": 0.013,
+   "totalEnergy": 4480.416992
+  },
+  {
+   "t": "10:17:00",
+   "sessionEnergy": 0.015,
+   "totalEnergy": 4480.418945
+  },
+  {
+   "t": "10:17:04",
+   "sessionEnergy": 0.016,
+   "totalEnergy": 4480.419922
+  },
+  {
+   "t": "10:17:07",
+   "sessionEnergy": 0.019,
+   "totalEnergy": 4480.422852
+  },
+  {
+   "t": "10:17:11",
+   "sessionEnergy": 0.02,
+   "totalEnergy": 4480.423828
+  },
+  {
+   "t": "10:17:15",
+   "sessionEnergy": 0.023,
+   "totalEnergy": 4480.426758
+  },
+  {
+   "t": "10:17:18",
+   "sessionEnergy": 0.025,
+   "totalEnergy": 4480.429199
+  },
+  {
+   "t": "10:17:22",
+   "sessionEnergy": 0.027,
+   "totalEnergy": 4480.431152
+  },
+  {
+   "t": "10:17:26",
+   "sessionEnergy": 0.029,
+   "totalEnergy": 4480.433105
+  },
+  {
+   "t": "10:17:30",
+   "sessionEnergy": 0.032,
+   "totalEnergy": 4480.436035
+  },
+  {
+   "t": "10:17:34",
+   "sessionEnergy": 0.034,
+   "totalEnergy": 4480.437988
+  },
+  {
+   "t": "10:17:38",
+   "sessionEnergy": 0.036,
+   "totalEnergy": 4480.439941
+  },
+  {
+   "t": "10:17:42",
+   "sessionEnergy": 0.039,
+   "totalEnergy": 4480.442871
+  },
+  {
+   "t": "10:17:46",
+   "sessionEnergy": 0.041,
+   "totalEnergy": 4480.444824
+  },
+  {
+   "t": "10:17:50",
+   "sessionEnergy": 0.043,
+   "totalEnergy": 4480.446777
+  },
+  {
+   "t": "10:17:54",
+   "sessionEnergy": 0.046,
+   "totalEnergy": 4480.450195
+  },
+  {
+   "t": "10:17:58",
+   "sessionEnergy": 0.048,
+   "totalEnergy": 4480.452148
+  },
+  {
+   "t": "10:18:02",
+   "sessionEnergy": 0.05,
+   "totalEnergy": 4480.454102
+  },
+  {
+   "t": "10:18:07",
+   "sessionEnergy": 0.053,
+   "totalEnergy": 4480.457031
+  },
+  {
+   "t": "10:18:11",
+   "sessionEnergy": 0.055,
+   "totalEnergy": 4480.458984
+  },
+  {
+   "t": "10:18:15",
+   "sessionEnergy": 0.058,
+   "totalEnergy": 4480.461914
+  },
+  {
+   "t": "10:18:19",
+   "sessionEnergy": 0.06,
+   "totalEnergy": 4480.463867
+  },
+  {
+   "t": "10:18:23",
+   "sessionEnergy": 0.062,
+   "totalEnergy": 4480.46582
+  },
+  {
+   "t": "10:18:27",
+   "sessionEnergy": 0.065,
+   "totalEnergy": 4480.469238
+  },
+  {
+   "t": "10:18:31",
+   "sessionEnergy": 0.067,
+   "totalEnergy": 4480.471191
+  },
+  {
+   "t": "10:18:35",
+   "sessionEnergy": 0.069,
+   "totalEnergy": 4480.473145
+  },
+  {
+   "t": "10:18:39",
+   "sessionEnergy": 0.072,
+   "totalEnergy": 4480.476074
+  },
+  {
+   "t": "10:18:44",
+   "sessionEnergy": 0.074,
+   "totalEnergy": 4480.478027
+  },
+  {
+   "t": "10:18:48",
+   "sessionEnergy": 0.077,
+   "totalEnergy": 4480.480957
+  },
+  {
+   "t": "10:18:51",
+   "sessionEnergy": 0.079,
+   "totalEnergy": 4480.48291
+  },
+  {
+   "t": "10:18:55",
+   "sessionEnergy": 0.081,
+   "totalEnergy": 4480.484863
+  },
+  {
+   "t": "10:18:59",
+   "sessionEnergy": 0.083,
+   "totalEnergy": 4480.486816
+  },
+  {
+   "t": "10:19:03",
+   "sessionEnergy": 0.086,
+   "totalEnergy": 4480.490234
+  },
+  {
+   "t": "10:19:07",
+   "sessionEnergy": 0.088,
+   "totalEnergy": 4480.492188
+  },
+  {
+   "t": "10:19:11",
+   "sessionEnergy": 0.09,
+   "totalEnergy": 4480.494141
+  },
+  {
+   "t": "10:19:15",
+   "sessionEnergy": 0.093,
+   "totalEnergy": 4480.49707
+  },
+  {
+   "t": "10:19:19",
+   "sessionEnergy": 0.096,
+   "totalEnergy": 4480.5
+  },
+  {
+   "t": "10:19:23",
+   "sessionEnergy": 0.098,
+   "totalEnergy": 4480.501953
+  },
+  {
+   "t": "10:19:27",
+   "sessionEnergy": 0.101,
+   "totalEnergy": 4480.504883
+  },
+  {
+   "t": "10:19:32",
+   "sessionEnergy": 0.103,
+   "totalEnergy": 4480.506836
+  },
+  {
+   "t": "10:19:35",
+   "sessionEnergy": 0.106,
+   "totalEnergy": 4480.509766
+  },
+  {
+   "t": "10:19:40",
+   "sessionEnergy": 0.109,
+   "totalEnergy": 4480.513184
+  },
+  {
+   "t": "10:19:44",
+   "sessionEnergy": 0.113,
+   "totalEnergy": 4480.51709
+  },
+  {
+   "t": "10:19:48",
+   "sessionEnergy": 0.117,
+   "totalEnergy": 4480.520996
+  },
+  {
+   "t": "10:19:52",
+   "sessionEnergy": 0.12,
+   "totalEnergy": 4480.523926
+  },
+  {
+   "t": "10:19:56",
+   "sessionEnergy": 0.124,
+   "totalEnergy": 4480.527832
+  },
+  {
+   "t": "10:20:00",
+   "sessionEnergy": 0.129,
+   "totalEnergy": 4480.533203
+  },
+  {
+   "t": "10:20:04",
+   "sessionEnergy": 0.132,
+   "totalEnergy": 4480.536133
+  },
+  {
+   "t": "10:20:08",
+   "sessionEnergy": 0.135,
+   "totalEnergy": 4480.539062
+  },
+  {
+   "t": "10:20:13",
+   "sessionEnergy": 0.14,
+   "totalEnergy": 4480.543945
+  },
+  {
+   "t": "10:20:17",
+   "sessionEnergy": 0.144,
+   "totalEnergy": 4480.547852
+  },
+  {
+   "t": "10:20:21",
+   "sessionEnergy": 0.148,
+   "totalEnergy": 4480.551758
+  },
+  {
+   "t": "10:20:25",
+   "sessionEnergy": 0.151,
+   "totalEnergy": 4480.555176
+  },
+  {
+   "t": "10:20:29",
+   "sessionEnergy": 0.155,
+   "totalEnergy": 4480.559082
+  },
+  {
+   "t": "10:20:33",
+   "sessionEnergy": 0.16,
+   "totalEnergy": 4480.563965
+  },
+  {
+   "t": "10:20:37",
+   "sessionEnergy": 0.163,
+   "totalEnergy": 4480.566895
+  },
+  {
+   "t": "10:20:41",
+   "sessionEnergy": 0.166,
+   "totalEnergy": 4480.569824
+  },
+  {
+   "t": "10:20:45",
+   "sessionEnergy": 0.171,
+   "totalEnergy": 4480.575195
+  },
+  {
+   "t": "10:20:50",
+   "sessionEnergy": 0.175,
+   "totalEnergy": 4480.579102
+  },
+  {
+   "t": "10:20:54",
+   "sessionEnergy": 0.179,
+   "totalEnergy": 4480.583008
+  },
+  {
+   "t": "10:20:58",
+   "sessionEnergy": 0.182,
+   "totalEnergy": 4480.585938
+  },
+  {
+   "t": "10:21:02",
+   "sessionEnergy": 0.186,
+   "totalEnergy": 4480.589844
+  },
+  {
+   "t": "10:21:06",
+   "sessionEnergy": 0.191,
+   "totalEnergy": 4480.595215
+  },
+  {
+   "t": "10:21:10",
+   "sessionEnergy": 0.194,
+   "totalEnergy": 4480.598145
+  },
+  {
+   "t": "10:21:14",
+   "sessionEnergy": 0.197,
+   "totalEnergy": 4480.601074
+  },
+  {
+   "t": "10:21:18",
+   "sessionEnergy": 0.202,
+   "totalEnergy": 4480.605957
+  },
+  {
+   "t": "10:21:22",
+   "sessionEnergy": 0.206,
+   "totalEnergy": 4480.609863
+  },
+  {
+   "t": "10:21:27",
+   "sessionEnergy": 0.21,
+   "totalEnergy": 4480.61377
+  },
+  {
+   "t": "10:21:31",
+   "sessionEnergy": 0.213,
+   "totalEnergy": 4480.617188
+  },
+  {
+   "t": "10:21:35",
+   "sessionEnergy": 0.217,
+   "totalEnergy": 4480.621094
+  },
+  {
+   "t": "10:21:39",
+   "sessionEnergy": 0.221,
+   "totalEnergy": 4480.625
+  },
+  {
+   "t": "10:21:43",
+   "sessionEnergy": 0.225,
+   "totalEnergy": 4480.628906
+  },
+  {
+   "t": "10:21:47",
+   "sessionEnergy": 0.228,
+   "totalEnergy": 4480.631836
+  },
+  {
+   "t": "10:21:51",
+   "sessionEnergy": 0.233,
+   "totalEnergy": 4480.637207
+  },
+  {
+   "t": "10:21:56",
+   "sessionEnergy": 0.236,
+   "totalEnergy": 4480.640137
+  },
+  {
+   "t": "10:22:00",
+   "sessionEnergy": 0.241,
+   "totalEnergy": 4480.64502
+  },
+  {
+   "t": "10:22:05",
+   "sessionEnergy": 0.245,
+   "totalEnergy": 4480.648926
+  },
+  {
+   "t": "10:22:09",
+   "sessionEnergy": 0.249,
+   "totalEnergy": 4480.652832
+  }
+ ]
+}

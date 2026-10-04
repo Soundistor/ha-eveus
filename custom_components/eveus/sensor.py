@@ -15,7 +15,11 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_change
-from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
+from homeassistant.helpers.restore_state import (
+    ExtraStoredData,
+    RestoreEntity,
+    RestoreStateData,
+)
 from homeassistant.util import dt as dt_util
 
 from .charger.base import as_float
@@ -375,12 +379,22 @@ class SessionEnergySensor(ChargerSensor, RestoreEntity):
         super().__init__(coordinator, charger, description, prefix, entry_id)
         self._attr_last_reset = None
         self._prev_energy: float | None = None
+        # The anchor: both counters as they stood when the current session was
+        # last known to start. Deliberately NOT called a snapshot — the daily
+        # sensors use that word for a pair that moves on every full frame,
+        # while this one moves only when a session boundary is found.
+        self._anchor_energy: float | None = None
+        self._anchor_total: float | None = None
 
     @property
     def extra_restore_state_data(self) -> _StoredValues:
         last_reset = self._attr_last_reset
         return _StoredValues(
-            {"last_reset": last_reset.isoformat() if last_reset else None}
+            {
+                "last_reset": last_reset.isoformat() if last_reset else None,
+                "anchor_energy": self._anchor_energy,
+                "anchor_total": self._anchor_total,
+            }
         )
 
     async def async_added_to_hass(self) -> None:
@@ -390,12 +404,61 @@ class SessionEnergySensor(ChargerSensor, RestoreEntity):
             stored = values.get("last_reset")
             if stored:
                 self._attr_last_reset = dt_util.parse_datetime(stored)
+            # Both halves or neither: an anchor with one counter missing would
+            # compare readings from different frames.
+            energy = as_float(values.get("anchor_energy"))
+            total = as_float(values.get("anchor_total"))
+            if energy is not None and total is not None:
+                self._anchor_energy, self._anchor_total = energy, total
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        current = self.coordinator.data.get("sessionEnergy") if self.coordinator.data else None
-        if self._prev_energy is not None and current is not None and current < self._prev_energy:
+        data = self.coordinator.data or {}
+        current = as_float(data.get("sessionEnergy"))
+        total = as_float(data.get("totalEnergy"))
+        # A frame carries the counters only if BOTH are present and the
+        # lifetime one is non-zero. V1 serves an all-zero frame for about 8 s
+        # after a reboot, and anchoring on it makes the next frame look like a
+        # 200 kWh session boundary — seen in two retained logs, not in theory.
+        carries = current is not None and total is not None and total != 0
+
+        # The observed drop stays the primary rule: it needs no anchor and
+        # fires on the frame the station zeroes the counter.
+        reset = (
+            self._prev_energy is not None
+            and current is not None
+            and current < self._prev_energy
+        )
+        if not reset and carries and self._anchor_energy is not None:
+            # The identity. Across a session reset the two counters disagree by
+            # exactly the finished session's energy; within one session they
+            # move in lockstep — measured at 0.0000 on V1 and 0.0005 on V2 over
+            # spans up to four hours, so no gap gate is needed or wanted. One
+            # gated on the coordinator's gap would be shut in the very case
+            # this exists for, an HA restart across the reset.
+            delta = (total - self._anchor_total) - (current - self._anchor_energy)
+            reset = delta > _CHARGE_MOVED_KWH
+
+        if reset:
             self._attr_last_reset = dt_util.utcnow()
+            # Persist immediately rather than waiting for the periodic dump:
+            # after a crash a stale last_reset makes the recorder book a second
+            # reset for one event. It changes about once per session.
+            if self.hass is not None:
+                self.hass.async_create_task(
+                    RestoreStateData.async_save_persistent_states(self.hass)
+                )
+
+        if not carries:
+            # Half a pair is worse than none: sessionEnergy from one frame
+            # against totalEnergy from another differs by ~0.06 kWh per 30 s at
+            # 7 kW, well over the threshold, with no reset in sight. The price
+            # of clearing is a reset in the very next frame going unseen by the
+            # identity, which is the miss direction.
+            self._anchor_energy = self._anchor_total = None
+        elif reset or self._anchor_energy is None:
+            self._anchor_energy, self._anchor_total = current, total
+
         self._prev_energy = current
         super()._handle_coordinator_update()
 
@@ -425,6 +488,14 @@ ATTR_DAY_INCOMPLETE = "day_incomplete"
 # Strictly greater, never "!= 0": a V1 power cut rolls totalEnergy BACK to its
 # value at session start (§1.1.7, measured -0.5 kWh), and an inequality would
 # read a lost tail as charging.
+#
+# TWO consumers, and raising this for one would silently break the other:
+# DailySessionTimeSensor asks "did the station charge across an interval
+# nobody watched", SessionEnergySensor asks "do the two counters disagree by a
+# whole session". Both rest on the one measured fact above, which is why they
+# share the number rather than keeping two that drift apart. HARD BOUND: it
+# must stay BELOW 0.1, because the smallest non-zero V1 session reset shows up
+# as exactly 0.1 and a threshold at or above that would miss every one of them.
 _CHARGE_MOVED_KWH = 0.05
 
 
