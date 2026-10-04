@@ -194,6 +194,100 @@ def test_the_pairs_the_old_rule_cannot_see_are_the_point(capture):
     assert blind > 0, f"{name}: the capture holds no pairs that blind the old rule"
 
 
+async def test_what_is_persisted_on_a_fire_is_the_NEW_anchor(hass, monkeypatch):
+    """The persist must not capture the new last_reset beside the old anchor.
+
+    Saving on the spot is what keeps a crash from leaving a last_reset the
+    recorder books twice. But async_create_task is eager, so the coroutine
+    runs up to its first await inside the call, and the restore helper reads
+    extra_restore_state_data right there. Scheduled before the re-anchor it
+    stored exactly the pair it was meant to prevent: a crash within the window
+    would restore it and the identity would fire again on the same event.
+
+    Asserting on last_reset alone cannot see this — it is already correct at
+    both points. The anchor is what differs.
+    """
+    import custom_components.eveus.sensor as sensor_mod
+
+    captured: list[dict] = []
+    segs = _segments(_load("session_reset_v2.json"))
+    sensor, coord = _sensor()
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_session_energy_probe"
+
+    async def _spy(_hass):
+        captured.append(sensor.extra_restore_state_data.as_dict())
+
+    monkeypatch.setattr(
+        sensor_mod.RestoreStateData, "async_save_persistent_states", _spy
+    )
+
+    _feed(sensor, coord, segs[0][-1])          # anchor on the old session
+    _feed(sensor, coord, segs[2][-1])          # identity fires here
+    await hass.async_block_till_done()
+
+    assert captured, "a fire must persist at once, not wait for the 15 min dump"
+    saved = captured[-1]
+    assert saved["last_reset"] is not None
+    assert saved["anchor_energy"] == segs[2][-1]["sessionEnergy"], (
+        "the stored anchor is the pre-reset one, so a crash now would make the "
+        "next frame fire a second time for this same reset"
+    )
+    assert saved["anchor_total"] == segs[2][-1]["totalEnergy"]
+
+
+async def test_a_restore_without_an_anchor_gives_no_verdict(hass):
+    """Old-format storage carries only last_reset — there is nothing to compare.
+
+    Goes through async_added_to_hass rather than setting the fields, because
+    the question is what the restore path produces, not what the arithmetic
+    does once it is handed an anchor.
+    """
+    from homeassistant.core import State
+    from pytest_homeassistant_custom_component.common import (
+        mock_restore_cache_with_extra_data,
+    )
+
+    sensor, coord = _sensor()
+    sensor.hass = hass
+    sensor.entity_id = "sensor.eveus_session_energy_old"
+    mock_restore_cache_with_extra_data(
+        hass,
+        ((State(sensor.entity_id, "1.5"), {"last_reset": "2026-09-27T10:00:00+00:00"}),),
+    )
+    await sensor.async_added_to_hass()
+    restored = sensor._attr_last_reset
+
+    assert sensor._anchor_energy is None and sensor._anchor_total is None
+    segs = _segments(_load("session_reset_v2.json"))
+    _feed(sensor, coord, segs[2][-1])
+
+    assert sensor._attr_last_reset == restored, (
+        "with no anchor there is no verdict; the first frame only takes one"
+    )
+    assert sensor._anchor_total == segs[2][-1]["totalEnergy"]
+
+
+def test_the_identity_re_anchors_when_it_is_the_rule_that_fired(capture):
+    """The drop rule is not the only one that must re-anchor.
+
+    Feed a pair the drop rule cannot see, then keep feeding the new session:
+    without re-anchoring, every later frame fires again against the stale
+    anchor.
+    """
+    name, segs = capture
+    sensor, coord = _sensor()
+    _feed(sensor, coord, segs[0][-1])
+
+    moves = 0
+    for frame in segs[2]:
+        before = sensor._attr_last_reset
+        _feed(sensor, coord, frame)
+        if sensor._attr_last_reset != before:
+            moves += 1
+    assert moves == 1, f"{name}: identity fired {moves} times for one reset"
+
+
 def test_a_frame_without_the_lifetime_counter_clears_the_anchor():
     """Half a pair is worse than none, so the anchor is dropped, not kept.
 
@@ -274,6 +368,48 @@ def test_one_boundary_fires_once_not_twice(capture):
         if sensor._attr_last_reset != before:
             moves.append(frame["t"])
     assert len(moves) == 1, f"{name}: last_reset moved at {moves}, expected one boundary"
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    ["long_session_v2.json", "long_session_v2_limit.json", "long_session_v1.json"],
+)
+def test_the_floor_does_not_grow_with_the_span(fixture):
+    """The claim the whole mechanism rests on, defended inside CI.
+
+    Dropping the gap gate is only safe because the two counters stay in
+    lockstep for as long as a session lasts — not merely over the few minutes
+    of the reset captures. That was swept on gitignored logs, so a regression
+    making the disagreement grow with span or energy would have been invisible
+    here. These are the longest continuous sessions retained: one session each,
+    no resets, so every frame must read as silence against an anchor fixed at
+    the first frame.
+    """
+    payload = json.loads((_FIXTURES / fixture).read_text(encoding="utf-8"))
+    frames = payload["frames"]
+    sensor, coord = _sensor()
+
+    _feed(sensor, coord, frames[0])
+    anchor_e, anchor_t = sensor._anchor_energy, sensor._anchor_total
+    worst, worst_at = 0.0, None
+
+    for frame in frames[1:]:
+        _feed(sensor, coord, frame)
+        d = (frame["totalEnergy"] - anchor_t) - (frame["sessionEnergy"] - anchor_e)
+        if abs(d) > abs(worst):
+            worst, worst_at = d, frame["t"]
+
+    assert sensor._attr_last_reset is None, (
+        f"{fixture}: fired inside one session at {worst_at}, D={worst}"
+    )
+    assert (sensor._anchor_energy, sensor._anchor_total) == (anchor_e, anchor_t), (
+        "no fire and no missing counter, so the anchor must not have moved"
+    )
+    assert abs(worst) < 0.01, (
+        f"{fixture}: counters drifted {worst} kWh over "
+        f"{payload['energy_moved_kwh']} kWh ({payload['span']}) — the floor is "
+        "supposed to be independent of the span, and the threshold is 0.05"
+    )
 
 
 def test_the_threshold_stays_below_the_v1_quantum():

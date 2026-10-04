@@ -441,13 +441,6 @@ class SessionEnergySensor(ChargerSensor, RestoreEntity):
 
         if reset:
             self._attr_last_reset = dt_util.utcnow()
-            # Persist immediately rather than waiting for the periodic dump:
-            # after a crash a stale last_reset makes the recorder book a second
-            # reset for one event. It changes about once per session.
-            if self.hass is not None:
-                self.hass.async_create_task(
-                    RestoreStateData.async_save_persistent_states(self.hass)
-                )
 
         if not carries:
             # Half a pair is worse than none: sessionEnergy from one frame
@@ -461,6 +454,21 @@ class SessionEnergySensor(ChargerSensor, RestoreEntity):
 
         self._prev_energy = current
         super()._handle_coordinator_update()
+
+        if reset and self.hass is not None:
+            # LAST, and the order is the whole point. Persisting immediately
+            # rather than waiting for the periodic dump is what stops a crash
+            # leaving a last_reset the recorder books twice — but
+            # async_create_task is eager by default (core.py:793), so the
+            # coroutine runs up to its first await inside this very call, and
+            # async_dump_states reads extra_restore_state_data right there.
+            # Scheduled any earlier it would capture the NEW last_reset beside
+            # the OLD anchor, and a crash within the window would restore that
+            # pair and fire the identity a second time on the same event —
+            # the exact phantom this persist exists to prevent.
+            self.hass.async_create_task(
+                RestoreStateData.async_save_persistent_states(self.hass)
+            )
 
 
 # How far from a boundary an observation may sit and still count as covering it.
