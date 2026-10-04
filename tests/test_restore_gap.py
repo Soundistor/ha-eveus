@@ -55,6 +55,10 @@ async def _setup_with_stored(hass, stored: dict) -> MockConfigEntry:
     mock_restore_cache_with_extra_data(
         hass, ((State(_ENTITY, "0.0"), stored),)
     )
+    return await _setup_without_stored(hass)
+
+
+async def _setup_without_stored(hass) -> MockConfigEntry:
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={
@@ -141,6 +145,36 @@ async def test_a_restore_of_yesterday_leaves_the_day_flagged(hass, charging_stat
     assert float(state.state) == 0.0, "yesterday's total must not carry over"
     assert state.attributes["day_incomplete"] is True, (
         "ten unwatched hours of this day must not read as a day fully observed"
+    )
+
+
+async def test_a_sensor_with_nothing_stored_does_not_claim_the_day(
+    hass, charging_station
+):
+    """No payload at all is not evidence that nothing was missed.
+
+    The first version of this fix made an exception here, reasoning that a new
+    sensor has no earlier observation of its own to be missing. That is the
+    same mislabel one case over: the coordinator's gap measures the
+    COORDINATOR's blindness, never this sensor's coverage of the day. A review
+    pass caught it.
+
+    Two real ways to arrive here with hours of the day genuinely unobserved:
+    RestoreEntity drops stored state after seven days, and an entity added —
+    or removed and re-added — at midday has no claim on the morning.
+    """
+    # No restore cache seeded at all: async_get_last_extra_data and
+    # async_get_last_state both come back empty, which is the genuine
+    # fresh-entity path. Seeding an empty payload would instead exercise the
+    # corrupt-payload branch, which returns a few lines earlier.
+    await _setup_without_stored(hass)
+
+    await _poll_again(hass)
+
+    state = hass.states.get(_ENTITY)
+    assert state is not None
+    assert state.attributes["day_incomplete"] is True, (
+        "a sensor that cannot show it was watching must not say the day was"
     )
 
 

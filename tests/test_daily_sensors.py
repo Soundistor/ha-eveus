@@ -742,6 +742,11 @@ def test_a_web_ui_counter_reset_does_not_mark_the_day_incomplete(clock):
 def test_daily_session_time_is_complete_while_the_polling_is_unbroken(clock):
     sensor, coord = _make(DailySessionTimeSensor)
     clock["now"] = _DAY
+    # A frame BEFORE the rollover, because that is what a sensor running into
+    # midnight always has. Without it the sensor has no stamp, cannot size any
+    # gap, and the unbroken polling this test is about never gets measured —
+    # the stub would be asserting on a sensor production never produces.
+    _update(sensor, coord, sessionTime=70, curMeas1=16.0, gap_s=30.0)
     sensor._roll_over_at_midnight(None)
 
     _update(sensor, coord, sessionTime=100, curMeas1=16.0, gap_s=30.0)
@@ -753,6 +758,7 @@ def test_daily_session_time_is_incomplete_after_an_unwatched_stretch(clock):
     """And it stays incomplete: a tidy afternoon does not erase a quiet hour."""
     sensor, coord = _make(DailySessionTimeSensor)
     clock["now"] = _DAY
+    _update(sensor, coord, sessionTime=70, curMeas1=16.0, gap_s=30.0)  # see above
     sensor._roll_over_at_midnight(None)
     _update(sensor, coord, sessionTime=100, curMeas1=16.0, gap_s=30.0)
     assert sensor.extra_state_attributes["day_incomplete"] is False
