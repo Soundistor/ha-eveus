@@ -145,10 +145,12 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_success_mono: float | None = None
         self._setpoint_dropped = 0
         self._counter_dropped = 0
-        # RAM only, and knowingly so: after an HA restart the first frame is
-        # believed whatever it says. Persisting it would buy the one case where
-        # a blackout takes the station and HA together — a real gap, but not
-        # worth a stored baseline that can itself go stale.
+        # RAM only, and knowingly so: after an HA restart the first non-zero
+        # frame is believed whatever it says; a zero still has to confirm (see
+        # _drop_unconfirmed_counter_drops). Persisting it would only add the
+        # small non-zero rollbacks across a restart — real tail losses that
+        # the guard confirms a poll later anyway — and is not worth a stored
+        # baseline that can itself go stale.
         self._last_counter: dict[str, float] = {}
         self._counter_low_streak: dict[str, int] = {}
         self._counter_low_since: dict[str, datetime] = {}
@@ -317,6 +319,9 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         confirms; a permanent loss confirms on the next poll and the counter
         carries on from there instead of freezing until it climbs back.
 
+        With no earlier reading (first frames after HA starts) the same rule
+        applies to a zero: held back until a second frame confirms it.
+
         A 12 h continuous run on both stations (2026-09-13, ~24 900 samples at
         2 s) saw exactly one step down, straight after a gap and with the
         station reporting no_data — and none at all during uninterrupted
@@ -328,7 +333,13 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if value is None:
                 continue
             last = self._last_counter.get(key)
-            if last is None or value >= last:
+            # With nothing to compare against, a zero is held back as well.
+            # Measured 2026-11-15 on V1: HA had restarted while the station was
+            # off, the station's first frame read no_data with totalEnergy 0
+            # and the real 442.0 came a poll later — the day took 0 as its
+            # baseline and reported 449.1 kWh. A non-zero first reading is
+            # still believed; every boot artefact measured so far is all-zero.
+            if (value >= last) if last is not None else value != 0:
                 self._last_counter[key] = value
                 self._counter_low_streak[key] = 0
                 self._counter_low_since.pop(key, None)
@@ -356,13 +367,21 @@ class ChargerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             self._counter_low_streak[key] = streak
             self._counter_dropped += 1
-            _LOGGER.warning(
-                "Holding back %s=%s: below the last known %s and not yet "
-                "confirmed by a second frame",
-                key,
-                value,
-                last,
-            )
+            if last is None:
+                _LOGGER.warning(
+                    "Holding back %s=%s: a zero with no earlier reading to "
+                    "compare against, not yet confirmed by a second frame",
+                    key,
+                    value,
+                )
+            else:
+                _LOGGER.warning(
+                    "Holding back %s=%s: below the last known %s and not yet "
+                    "confirmed by a second frame",
+                    key,
+                    value,
+                    last,
+                )
             del data[key]
 
     async def _async_update_data(self) -> dict[str, Any]:

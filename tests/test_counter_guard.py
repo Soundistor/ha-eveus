@@ -211,10 +211,41 @@ async def test_the_first_frame_after_a_restart_is_believed(hass):
     frame = await _poll(coord, totalEnergy=12.0)
 
     # RAM-only memory, stated in the coordinator: with nothing to compare
-    # against, the first frame is taken as read. The gap this leaves — a
-    # blackout that takes the station and HA together — is known and accepted.
+    # against, a non-zero first frame is taken as read. Only a zero has to
+    # confirm (the 2026-11-15 boot frame, tested below).
     assert frame["totalEnergy"] == 12.0
     assert coord._counter_dropped == 0
+
+
+async def test_a_real_zero_after_a_restart_is_believed_a_poll_later(hass, freezer):
+    coord = _coordinator(hass)
+
+    held = await _poll(coord, totalEnergy=0.0)
+    freezer.tick(coord.update_interval)
+    confirmed = await _poll(coord, totalEnergy=0.0)
+
+    # A brand-new station, or a counter reset while HA was down, really reads
+    # 0. Holding it forever would leave the sensor unknown until it climbed.
+    assert "totalEnergy" not in held
+    assert confirmed["totalEnergy"] == 0.0
+
+
+async def test_a_boot_zero_after_a_restart_does_not_confirm_on_a_write_poll(
+    hass, freezer
+):
+    coord = _coordinator(hass)
+    sensor = _daily(coord)
+
+    await _poll(coord, sensor, state="no_data", totalEnergy=0.0)
+    freezer.tick(WRITE_SETTLE)                              # a write-triggered poll
+    still_held = await _poll(coord, sensor, state="no_data", totalEnergy=0.0)
+    freezer.tick(coord.update_interval)
+    await _poll(coord, sensor, state="charging", totalEnergy=442.0)
+
+    # Same time condition as for a drop: two frames 3 s apart are still inside
+    # the station's boot window and must not confirm the zero.
+    assert "totalEnergy" not in still_held
+    assert sensor.native_value == 0.0
 
 
 async def test_a_long_outage_does_not_carry_counter_evidence_across_it(hass, freezer):
@@ -232,3 +263,45 @@ async def test_a_long_outage_does_not_carry_counter_evidence_across_it(hass, fre
     # does not repeat — but pinned, because the reset clears both guards and
     # only one half was covered.
     assert "totalEnergy" not in held
+
+
+def _fresh(sensor):
+    """No day yet: the frame itself rolls the day over (sensor.py rollover branch)."""
+
+
+def _rolled_at_midnight(sensor):
+    """The live path: HA stayed up across midnight, the timer opened the day."""
+    sensor._roll_over_at_midnight(None)
+
+
+def _restored_same_day(sensor):
+    """HA restarted earlier the same day and restored a baseline from storage."""
+    sensor._current_date = _DAY.date()
+    sensor._baseline = 441.9
+    sensor._computed = 0.0
+
+
+@pytest.mark.parametrize(
+    "setup", [_fresh, _rolled_at_midnight, _restored_same_day]
+)
+async def test_a_boot_zero_as_the_first_frame_after_a_restart_never_reaches_the_day(
+    hass, freezer, setup
+):
+    # Live, 2026-11-15, V1: the station had been off since before the
+    # running HA started, so the coordinator had no previous counter. When the station
+    # was powered on, its first frame read state=no_data with totalEnergy=0,
+    # and the real 442.0 arrived a minute later. The day took its baseline
+    # from the zero and reported 449.1 kWh.
+    coord = _coordinator(hass)
+    sensor = _daily(coord)
+    setup(sensor)
+
+    await _poll(coord, sensor, state="no_data", totalEnergy=0.0)   # boot frame
+    freezer.tick(coord.update_interval)
+    await _poll(coord, sensor, state="charging", totalEnergy=442.0)
+    freezer.tick(timedelta(seconds=30))
+    await _poll(coord, sensor, state="charging", totalEnergy=442.1)
+
+    assert sensor.native_value == pytest.approx(
+        0.2 if setup is _restored_same_day else 0.1
+    )
