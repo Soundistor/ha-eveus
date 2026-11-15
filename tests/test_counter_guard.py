@@ -305,3 +305,17 @@ async def test_a_boot_zero_as_the_first_frame_after_a_restart_never_reaches_the_
     assert sensor.native_value == pytest.approx(
         0.2 if setup is _restored_same_day else 0.1
     )
+
+
+async def test_a_held_boot_zero_leaves_no_evidence_behind(hass, freezer):
+    coord = _coordinator(hass)
+
+    await _poll(coord, totalEnergy=0.0)                     # held, streak starts
+    freezer.tick(coord.update_interval)
+    await _poll(coord, totalEnergy=442.0)                   # believed
+    held = await _poll(coord, totalEnergy=0.0)              # a later boot zero
+
+    # The real reading must wipe the held zero's streak and timestamp. Left
+    # behind, they are already "two frames, an interval apart", and the next
+    # boot zero would confirm on its first frame.
+    assert "totalEnergy" not in held
